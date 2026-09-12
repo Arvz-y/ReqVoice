@@ -1,0 +1,130 @@
+import React from 'react';
+import {
+  PanelLeftOpen,
+  PanelLeftClose,
+  HelpCircle,
+  Database,
+  Layers,
+  FileText,
+  Mic,
+  LayoutDashboard,
+} from 'lucide-react';
+import { UserProfile } from '../types';
+
+interface TopBarProps {
+  currentUser: UserProfile;
+  activeTab: string;
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  onOpenProfile: () => void;
+  onOpenTutorial: () => void;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({
+  currentUser,
+  activeTab,
+  isSidebarOpen,
+  onToggleSidebar,
+  onOpenProfile,
+  onOpenTutorial,
+}) => {
+  const getTabDetails = (tab: string) => {
+    switch (tab) {
+      case 'dashboard':
+        return { title: 'Overview', icon: LayoutDashboard, subtitle: 'Metrics & active sessions' };
+      case 'systems':
+        return { title: 'Systems & Guides', icon: Layers, subtitle: 'Architectures & interview protocols' };
+      case 'live':
+        return { title: 'Session Monitor', icon: Mic, subtitle: 'Real-time proctoring (read-only)' };
+      case 'reports':
+        return { title: 'Reports & Transcripts', icon: FileText, subtitle: 'Video evidence & AI transcripts' };
+      case 'database':
+        return { title: 'MySQL Database', icon: Database, subtitle: 'Relational storage & exports' };
+      default:
+        return { title: 'Requirements Studio', icon: LayoutDashboard, subtitle: 'ReqVoice AI' };
+    }
+  };
+
+  const currentTabInfo = getTabDetails(activeTab);
+  const TabIcon = currentTabInfo.icon;
+  const avatarSrc =
+    currentUser.avatarUrl ||
+    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80';
+
+  return (
+    <header className="sticky top-0 z-30 h-16 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-6 lg:px-8 flex items-center justify-between font-sans">
+      
+      {/* Left: Sidebar Toggle & Page Title */}
+      <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
+        <button
+          id="btn-deploy-sidebar"
+          onClick={onToggleSidebar}
+          className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+            isSidebarOpen
+              ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+              : 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600 hover:text-white shadow-sm'
+          }`}
+          title={isSidebarOpen ? 'Hide Sidebar Menu' : 'Open Sidebar Menu'}
+          aria-label={isSidebarOpen ? 'Hide Sidebar Menu' : 'Open Sidebar Menu'}
+        >
+          {isSidebarOpen ? (
+            <PanelLeftClose className="w-4 h-4" />
+          ) : (
+            <>
+              <PanelLeftOpen className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden md:inline">Menu</span>
+            </>
+          )}
+        </button>
+
+        <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 shrink-0">
+            <TabIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xs sm:text-sm md:text-base font-bold text-white leading-tight font-heading truncate">
+              {currentTabInfo.title}
+            </h1>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate hidden sm:block">
+              {currentTabInfo.subtitle}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Actions & User Avatar */}
+      <div className="flex items-center space-x-2 shrink-0">
+        {/* Tutorial Link */}
+        <button
+          onClick={onOpenTutorial}
+          className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-indigo-400 border border-slate-800 transition-colors cursor-pointer hidden sm:flex items-center"
+          title="System Tutorial"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
+
+        {/* User Avatar & Profile */}
+        <button
+          onClick={onOpenProfile}
+          className="flex items-center space-x-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors cursor-pointer"
+          title="Profile & Settings"
+        >
+          <img
+            src={avatarSrc}
+            alt={currentUser.name}
+            className="w-7 h-7 rounded-lg object-cover border border-indigo-500/40"
+          />
+          <div className="hidden md:block text-left">
+            <p className="text-xs font-semibold text-white leading-none">
+              {currentUser.name.split(' ')[0]}
+            </p>
+            <p className="text-[9px] text-slate-400 font-mono">
+              @{currentUser.username || 'user'}
+            </p>
+          </div>
+        </button>
+      </div>
+
+    </header>
+  );
+};
