@@ -348,7 +348,7 @@ export const IntervieweePortal: React.FC<IntervieweePortalProps> = ({
     ctx.fillRect(0, 0, 640, 480);
     ctx.fillStyle = '#6366f1';
     ctx.font = 'bold 24px Outfit, sans-serif';
-    ctx.fillText('ReqVoice AI Camera Capture', 150, 180);
+    ctx.fillText('reqvoiceV2 Camera Capture', 150, 180);
     ctx.fillStyle = '#94a3b8';
     ctx.font = '16px Plus Jakarta Sans, sans-serif';
     ctx.fillText('Compressed Video & Audio Stream (640x480 @ 600 kbps)', 110, 220);

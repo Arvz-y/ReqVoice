@@ -5,6 +5,9 @@ import {
   Mic,
   FileText,
   Database,
+  Bot,
+  Smartphone,
+  MessageSquare,
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -19,6 +22,8 @@ import { ShareModal } from './components/ShareModal';
 import { AuthScreen } from './components/AuthScreen';
 import { TutorialModal } from './components/TutorialModal';
 import { ProfileModal } from './components/ProfileModal';
+import { AIChatAssistant } from './components/AIChatAssistant';
+import { MobileExperienceMode } from './components/MobileExperienceMode';
 import { api } from './lib/api';
 import { SystemUnderStudy, InterviewSession, UserProfile } from './types';
 
@@ -55,6 +60,7 @@ export function App() {
 
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [isFloatingChatOpen, setIsFloatingChatOpen] = useState<boolean>(false);
 
   // Application core data
   const [systems, setSystems] = useState<SystemUnderStudy[]>([]);
@@ -86,6 +92,15 @@ export function App() {
   const checkAuthAndLoadData = async () => {
     setAuthChecking(true);
     try {
+      const token = api.auth.getToken();
+      if (!token) {
+        // Enforce: User must always login first upon accessing the website
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setAuthChecking(false);
+        return;
+      }
+
       const session = await api.auth.me();
       if (session.user) {
         setCurrentUser(session.user);
@@ -93,22 +108,25 @@ export function App() {
         if (session.user.isFirstTime) {
           setShowTutorialModal(true);
         }
+
+        // Load initial systems & interview sessions
+        const [sysRes, invRes] = await Promise.all([
+          api.systems.list(),
+          api.interviews.list(),
+        ]);
+        setSystems(sysRes.systems || []);
+        setInterviews(invRes.interviews || []);
+        if (invRes.interviews?.length > 0 && !selectedInterviewId) {
+          setSelectedInterviewId(invRes.interviews[0].id);
+        }
       } else {
         setIsAuthenticated(false);
-      }
-
-      // Load initial systems & interview sessions
-      const [sysRes, invRes] = await Promise.all([
-        api.systems.list(),
-        api.interviews.list(),
-      ]);
-      setSystems(sysRes.systems || []);
-      setInterviews(invRes.interviews || []);
-      if (invRes.interviews?.length > 0 && !selectedInterviewId) {
-        setSelectedInterviewId(invRes.interviews[0].id);
+        setCurrentUser(null);
       }
     } catch (err) {
       console.warn('Initial session check error:', err);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
     } finally {
       setAuthChecking(false);
     }
@@ -156,6 +174,9 @@ export function App() {
       await api.auth.logout();
     } catch {}
     setIsAuthenticated(false);
+    setCurrentUser(null);
+    setSystems([]);
+    setInterviews([]);
   };
 
   // If candidate is visiting via direct share token
@@ -194,6 +215,8 @@ export function App() {
     { id: 'live', label: 'Monitor', icon: Mic },
     { id: 'reports', label: 'Reports', icon: FileText },
     { id: 'database', label: 'Database', icon: Database },
+    { id: 'chat', label: 'AI Chat', icon: Bot },
+    { id: 'mobile', label: 'Mobile App', icon: Smartphone },
   ];
 
   return (
@@ -276,12 +299,40 @@ export function App() {
           )}
 
           {activeTab === 'database' && <DatabaseView />}
+
+          {activeTab === 'chat' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold font-heading text-white">
+                    AI Requirements Copilot
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    Interact directly with selectable Google Gemini models grounded in your systems catalog and interview transcripts.
+                  </p>
+                </div>
+              </div>
+              <div className="h-[720px]">
+                <AIChatAssistant systems={systems} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'mobile' && (
+            <MobileExperienceMode
+              systems={systems}
+              interviews={interviews}
+              onStartInterview={() => setActiveTab('live')}
+              onOpenChat={() => setActiveTab('chat')}
+              onNavigateToReports={() => setActiveTab('reports')}
+            />
+          )}
         </main>
 
         {/* Desktop Footer */}
         <footer className="border-t border-slate-800/80 bg-slate-950/60 py-4 px-4 text-center text-xs text-slate-500 hidden lg:block">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <span className="font-semibold text-slate-400">ReqVoice AI</span>
+            <span className="font-semibold text-slate-400">reqvoiceV2</span>
             <span className="text-[11px] text-slate-500">
               Requirements Studio • MySQL Relational Engine
             </span>
@@ -352,6 +403,33 @@ export function App() {
           setCurrentUser((prev) => ({ ...prev, hasCompletedTutorial: true, isFirstTime: false }));
         }}
       />
+
+      {/* Floating AI Chat Assistant Widget (Accessible across all views) */}
+      {activeTab !== 'chat' && (
+        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end">
+          {isFloatingChatOpen && (
+            <div className="mb-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+              <AIChatAssistant
+                systems={systems}
+                isFloating={true}
+                onClose={() => setIsFloatingChatOpen(false)}
+              />
+            </div>
+          )}
+
+          <button
+            onClick={() => setIsFloatingChatOpen(!isFloatingChatOpen)}
+            className="group relative flex items-center space-x-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 text-white shadow-xl shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all duration-200 font-sans border border-indigo-400/30 cursor-pointer"
+            title="Open AI Chatbot (Choose Models)"
+          >
+            <Bot className="w-5 h-5 text-white animate-pulse" />
+            <span className="text-xs font-semibold tracking-wide">
+              {isFloatingChatOpen ? 'Close AI Copilot' : 'AI Copilot'}
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          </button>
+        </div>
+      )}
 
     </div>
   );

@@ -13,9 +13,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Form fields
-  const [usernameOrEmail, setUsernameOrEmail] = useState('sophia_reynolds');
-  const [password, setPassword] = useState('password123');
+  // Form fields (empty by default for mandatory security login)
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   // Register extra fields
   const [regName, setRegName] = useState('');
@@ -78,13 +78,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center space-x-2.5 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-indigo-400 font-mono mb-1 shadow-sm">
             <Shield className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Secure Enterprise Systems Portal</span>
+            <span>Security Protected • Login Required</span>
           </div>
           <h1 className="text-3xl font-extrabold text-white font-heading tracking-tight">
-            ReqVoice <span className="text-indigo-400">AI</span>
+            reqvoice<span className="text-indigo-400">V2</span>
           </h1>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Requirements Interview Intelligence Platform with Video Recording, SD Compression & Verbatim AI Transcription
+            Systems Requirements Interview Intelligence Platform with Video Recording, SD Compression & Verbatim AI Transcription
           </p>
         </div>
 
@@ -292,9 +292,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
 
         {/* Demo hints */}
         <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/60 text-center space-y-1">
-          <span className="text-[11px] text-slate-400 font-mono">
-            Default Demo Account: <span className="text-slate-200">sophia_reynolds</span> • Password: <span className="text-slate-200">password123</span>
-          </span>
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+            <span>Demo: <strong className="text-slate-200">sophia_reynolds</strong> / <strong className="text-slate-200">password123</strong></span>
+            <button
+              type="button"
+              onClick={handleFillDemo}
+              className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-sans cursor-pointer ml-2"
+            >
+              Fill Demo
+            </button>
+          </div>
         </div>
 
       </div>

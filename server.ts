@@ -350,7 +350,16 @@ let usersDb: StoredUser[] = [
   },
 ];
 
-let currentUserSession: StoredUser | null = usersDb[0];
+// Active authenticated sessions: token -> StoredUser (No default auto-login session for security)
+const activeSessions = new Map<string, StoredUser>();
+
+function getAuthUser(req: Request): StoredUser | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+  return activeSessions.get(token) || null;
+}
 
 function sanitizeUser(user: StoredUser) {
   const { password, ...safe } = user;
@@ -361,13 +370,19 @@ function sanitizeUser(user: StoredUser) {
 // API ROUTES
 // ========================
 
+// 0. Health check
+app.get("/api/health", (req: Request, res: Response) => {
+  res.json({ status: "ok", service: "reqvoiceV2", timestamp: new Date().toISOString() });
+});
+
 // 1. Auth routes
 app.get("/api/auth/me", (req: Request, res: Response) => {
-  if (!currentUserSession) {
+  const user = getAuthUser(req);
+  if (!user) {
     res.status(401).json({ user: null, message: "Not authenticated" });
     return;
   }
-  res.json({ user: sanitizeUser(currentUserSession) });
+  res.json({ user: sanitizeUser(user) });
 });
 
 app.post("/api/auth/login", (req: Request, res: Response) => {
@@ -392,8 +407,9 @@ app.post("/api/auth/login", (req: Request, res: Response) => {
     return;
   }
 
-  currentUserSession = user;
-  res.json({ success: true, user: sanitizeUser(user) });
+  const token = `rv2_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+  activeSessions.set(token, user);
+  res.json({ success: true, token, user: sanitizeUser(user) });
 });
 
 app.post("/api/auth/register", (req: Request, res: Response) => {
@@ -427,53 +443,60 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
   };
 
   usersDb.push(newUser);
-  currentUserSession = newUser;
-  res.json({ success: true, user: sanitizeUser(newUser) });
+  const token = `rv2_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+  activeSessions.set(token, newUser);
+  res.json({ success: true, token, user: sanitizeUser(newUser) });
 });
 
 app.post("/api/auth/logout", (req: Request, res: Response) => {
-  currentUserSession = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    activeSessions.delete(token);
+  }
   res.json({ success: true });
 });
 
 app.put("/api/auth/profile", (req: Request, res: Response) => {
-  if (!currentUserSession) {
+  const user = getAuthUser(req);
+  if (!user) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   const { name, username, department, role, avatarUrl, bio } = req.body;
 
-  if (username && username.trim().toLowerCase() !== currentUserSession.username.toLowerCase()) {
+  if (username && username.trim().toLowerCase() !== user.username.toLowerCase()) {
     const existing = usersDb.find(
-      (u) => u.id !== currentUserSession!.id && u.username.toLowerCase() === username.trim().toLowerCase()
+      (u) => u.id !== user.id && u.username.toLowerCase() === username.trim().toLowerCase()
     );
     if (existing) {
       res.status(400).json({ error: "This username is already taken." });
       return;
     }
-    currentUserSession.username = username.trim().toLowerCase();
+    user.username = username.trim().toLowerCase();
   }
 
-  if (name) currentUserSession.name = name.trim();
-  if (department) currentUserSession.department = department.trim();
-  if (role) currentUserSession.role = role.trim();
-  if (avatarUrl) currentUserSession.avatarUrl = avatarUrl.trim();
-  if (bio !== undefined) currentUserSession.bio = bio.trim();
+  if (name) user.name = name.trim();
+  if (department) user.department = department.trim();
+  if (role) user.role = role.trim();
+  if (avatarUrl) user.avatarUrl = avatarUrl.trim();
+  if (bio !== undefined) user.bio = bio.trim();
 
   // Also update corresponding interviewer names in interview records
   interviewsDb.forEach((inv) => {
-    if (inv.interviewerName === currentUserSession!.name) {
-      inv.interviewerRole = currentUserSession!.role;
-      inv.interviewerDept = currentUserSession!.department;
+    if (inv.interviewerName === user.name) {
+      inv.interviewerRole = user.role;
+      inv.interviewerDept = user.department;
     }
   });
 
-  res.json({ success: true, user: sanitizeUser(currentUserSession) });
+  res.json({ success: true, user: sanitizeUser(user) });
 });
 
 app.put("/api/auth/password", (req: Request, res: Response) => {
-  if (!currentUserSession) {
+  const user = getAuthUser(req);
+  if (!user) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -484,7 +507,7 @@ app.put("/api/auth/password", (req: Request, res: Response) => {
     return;
   }
 
-  if (currentUserSession.password !== currentPassword) {
+  if (user.password !== currentPassword) {
     res.status(400).json({ error: "Current password does not match records." });
     return;
   }
@@ -494,14 +517,15 @@ app.put("/api/auth/password", (req: Request, res: Response) => {
     return;
   }
 
-  currentUserSession.password = newPassword;
+  user.password = newPassword;
   res.json({ success: true, message: "Password updated successfully." });
 });
 
 app.post("/api/auth/tutorial-completed", (req: Request, res: Response) => {
-  if (currentUserSession) {
-    currentUserSession.hasCompletedTutorial = true;
-    currentUserSession.isFirstTime = false;
+  const user = getAuthUser(req);
+  if (user) {
+    user.hasCompletedTutorial = true;
+    user.isFirstTime = false;
   }
   res.json({ success: true });
 });
@@ -549,6 +573,7 @@ app.get("/api/interviews/:id", (req: Request, res: Response) => {
 });
 
 app.post("/api/interviews", (req: Request, res: Response) => {
+  const currentUser = getAuthUser(req);
   const { systemId, intervieweeName, intervieweeRole, intervieweeEmail, intervieweeDept, questions } = req.body;
   const sys = systemsDb.find((s) => s.id === systemId) || systemsDb[0];
 
@@ -566,9 +591,9 @@ app.post("/api/interviews", (req: Request, res: Response) => {
     id: `int-${Date.now().toString(36)}`,
     systemId: sys.id,
     systemName: sys.name,
-    interviewerName: currentUserSession?.name || "Dr. Sophia Reynolds",
-    interviewerRole: currentUserSession?.role || "Principal Requirements Architect",
-    interviewerDept: currentUserSession?.department || "Enterprise Systems Engineering",
+    interviewerName: currentUser?.name || "Dr. Sophia Reynolds",
+    interviewerRole: currentUser?.role || "Principal Requirements Architect",
+    interviewerDept: currentUser?.department || "Enterprise Systems Engineering",
     intervieweeName: intervieweeName || "Anonymous Stakeholder",
     intervieweeRole: intervieweeRole || "Operational Specialist",
     intervieweeEmail: intervieweeEmail || "",
@@ -1486,19 +1511,20 @@ COMMIT;
 
 // Single-File Consolidated Markdown/HTML Report of All Records
 app.get("/api/database/export-single-report", (req: Request, res: Response) => {
-  let md = `# ReqVoice AI - Consolidated Systems Requirements Report
+  const activeUser = getAuthUser(req);
+  let md = `# reqvoiceV2 - Consolidated Systems Requirements Report
 **Generated:** ${new Date().toUTCString()}  
 **MySQL Schema Engine:** InnoDB (utf8mb4)  
 
 ---
 
 ## 1. Executive Summary & Overview
-This unified report consolidates all systems requirements discovery sessions, stakeholder responses, automated sentiment classifications, verbatim AI transcripts, and storage efficiency metrics captured within ReqVoice AI.
+This unified report consolidates all systems requirements discovery sessions, stakeholder responses, automated sentiment classifications, verbatim AI transcripts, and storage efficiency metrics captured within reqvoiceV2.
 
 - **Systems Under Study:** ${systemsDb.length}
 - **Recorded Stakeholder Interviews:** ${interviewsDb.length}
 - **Completed Sessions:** ${interviewsDb.filter((i) => i.status === "completed").length}
-- **Active User:** ${currentUserSession?.name || "Dr. Sophia Reynolds"} (${currentUserSession?.role || "Principal Requirements Architect"})
+- **Active User:** ${activeUser?.name || "Dr. Sophia Reynolds"} (${activeUser?.role || "Principal Requirements Architect"})
 
 ---
 
@@ -1586,6 +1612,178 @@ ${inv.summaryReport.executiveSummary}
   res.setHeader("Content-Disposition", 'attachment; filename="reqvoice_complete_requirements_report.md"');
   res.setHeader("Content-Type", "text/markdown; charset=utf-8");
   res.send(md);
+});
+
+// 11. AI Assistant Chatbot with selectable AI models
+app.get("/api/ai/models", (_req: Request, res: Response) => {
+  res.json({
+    models: [
+      {
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        provider: "Google Gemini",
+        tagline: "Ultra-fast & multimodal default for requirements gathering",
+        speed: "Fastest (~0.5s)",
+        contextWindow: "1M tokens",
+        recommended: true,
+      },
+      {
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        provider: "Google Gemini",
+        tagline: "Complex enterprise architectural reasoning & deep spec analysis",
+        speed: "Deep Reasoning (~1.8s)",
+        contextWindow: "2M tokens",
+        recommended: false,
+      },
+      {
+        id: "gemini-1.5-pro",
+        name: "Gemini 1.5 Pro",
+        provider: "Google Gemini",
+        tagline: "High-stability long-document architectural synthesis",
+        speed: "Standard (~1.5s)",
+        contextWindow: "2M tokens",
+        recommended: false,
+      },
+      {
+        id: "gemini-1.5-flash",
+        name: "Gemini 1.5 Flash",
+        provider: "Google Gemini",
+        tagline: "Lightweight, low-latency requirements parsing",
+        speed: "Fast (~0.8s)",
+        contextWindow: "1M tokens",
+        recommended: false,
+      },
+    ],
+  });
+});
+
+app.post("/api/ai/chat", async (req: Request, res: Response) => {
+  try {
+    const { message, model = "gemini-2.5-flash", history = [], systemContextId } = req.body;
+
+    if (!message || typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "Message cannot be empty." });
+      return;
+    }
+
+    // Build rich domain grounding from current systems, interview transcripts, and database records
+    let domainKnowledge = `You are reqvoiceV2 AI Architect, an expert Systems Engineering & Requirements Discovery Copilot embedded within the reqvoiceV2 enterprise platform.
+Your objective is to help systems architects, business analysts, and engineering leads analyze systems requirements, interview protocols, stakeholder verbatim transcripts, sentiment, and technical specifications.
+
+Platform State Knowledge:
+- Systems under study in database: ${systemsDb.map((s) => `[${s.id}] "${s.name}" (${s.type}, ${s.lifecycleState}) - ${s.description}`).join("; ")}
+- Total Interviews Recorded: ${interviewsDb.length}
+- Recent Interview Sessions: ${interviewsDb.map((inv) => `Interview "${inv.id}" with ${inv.intervieweeName} (${inv.intervieweeRole}) for system "${inv.systemName}" [Status: ${inv.status}]`).join("; ")}
+`;
+
+    if (systemContextId) {
+      const targetedSystem = systemsDb.find((s) => s.id === systemContextId);
+      if (targetedSystem) {
+        const relatedInterviews = interviewsDb.filter((inv) => inv.systemId === targetedSystem.id);
+        domainKnowledge += `\nCurrently Focused System:
+- Name: ${targetedSystem.name} (${targetedSystem.type})
+- Lifecycle: ${targetedSystem.lifecycleState}
+- Description: ${targetedSystem.description}
+- Target Stakeholder Roles: ${targetedSystem.targetRoles.join(", ")}
+- Related Stakeholder Interviews: ${relatedInterviews.length}
+`;
+        relatedInterviews.forEach((inv) => {
+          domainKnowledge += `  * ${inv.intervieweeName} (${inv.intervieweeRole}): Responses logged: ${Object.keys(inv.responses).length}.\n`;
+          Object.values(inv.responses).forEach((resp: any) => {
+            if (resp.aiTranscript) {
+              domainKnowledge += `    - Verbatim Transcript: "${resp.aiTranscript.transcript}" (Sentiment: ${resp.aiTranscript.sentiment})\n`;
+              if (resp.aiTranscript.keyRequirements?.length) {
+                domainKnowledge += `    - Key Extracted Requirements: ${resp.aiTranscript.keyRequirements.join(", ")}\n`;
+              }
+            }
+          });
+        });
+      }
+    }
+
+    const ai = getGeminiClient();
+
+    // If Gemini client is available and API key is present
+    if (ai) {
+      // Validate model ID fallback
+      const validModels = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"];
+      const selectedModel = validModels.includes(model) ? model : "gemini-2.5-flash";
+
+      // Format conversation turns
+      const contents: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
+
+      // Add prior dialogue turns (last 10 turns to conserve context)
+      const recentHistory = Array.isArray(history) ? history.slice(-10) : [];
+      recentHistory.forEach((h: any) => {
+        if (h.role === "user" || h.role === "assistant" || h.role === "model") {
+          contents.push({
+            role: h.role === "assistant" ? "model" : (h.role as "user" | "model"),
+            parts: [{ text: String(h.content || h.text || "") }],
+          });
+        }
+      });
+
+      // Append current user message
+      contents.push({
+        role: "user",
+        parts: [{ text: message.trim() }],
+      });
+
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents,
+        config: {
+          systemInstruction: domainKnowledge + `
+Be precise, structured, and insightful. When asked for requirements, format them cleanly using IEEE 830 / ISO 29148 standards (e.g. Functional, Non-Functional, Interface, Performance, and Security requirements with prioritization MoSCoW: Must/Should/Could/Won't). Always cite stakeholder evidence when available.`,
+          temperature: 0.3,
+        },
+      });
+
+      const replyText = response.text || "I have analyzed your request based on the systems requirements database.";
+      res.json({
+        reply: replyText,
+        modelUsed: selectedModel,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // High-fidelity fallback synthesis when offline or running without external key
+    let fallbackReply = `### Analysis from reqvoiceV2 Assistant (${model})\n\n`;
+    if (message.toLowerCase().includes("requirement") || message.toLowerCase().includes("extract")) {
+      fallbackReply += `Based on the active systems catalog and interview database:\n\n` +
+        `**1. Core Functional Requirements:**\n` +
+        `- The system shall ingest real-time voice and video streams with sub-second latency.\n` +
+        `- Automated verbatim transcription must identify stakeholder emotional tone and pain points.\n` +
+        `- Architectural findings must map directly to Relational (MySQL) storage schemes.\n\n` +
+        `**2. Non-Functional Specifications:**\n` +
+        `- **Storage Compression:** Enforce client-side VP8/AAC downscaling (saving ~76% disk quota).\n` +
+        `- **Traceability:** Maintain ISO/IEC 29148 requirements verification links across all interviews.`;
+    } else if (message.toLowerCase().includes("system") || message.toLowerCase().includes("suggest")) {
+      fallbackReply += `Looking across your **${systemsDb.length} active systems** (${systemsDb.map(s => s.name).join(", ")}):\n\n` +
+        `- **Priority Review:** Ensure telemetry data pipelines have established failover recovery protocols.\n` +
+        `- **Stakeholder Gaps:** Consider scheduling a discovery session with Security / Compliance stakeholders to validate access boundary controls.`;
+    } else {
+      fallbackReply += `I am grounded in your **${systemsDb.length} registered systems** and **${interviewsDb.length} stakeholder interviews**.\n\n` +
+        `You can ask me to:\n` +
+        `- Extract functional and non-functional requirements from transcripts\n` +
+        `- Compare stakeholder sentiments across different departments\n` +
+        `- Formulate ISO 29148 compliant user stories and acceptance criteria\n` +
+        `- Draft next-step follow-up questions for upcoming interviews`;
+    }
+
+    res.json({
+      reply: fallbackReply,
+      modelUsed: `${model} (Local Grounding Engine)`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error("AI Chatbot Error:", error);
+    res.status(500).json({
+      error: "Failed to generate AI response. " + (error?.message || "Please verify your AI model parameters."),
+    });
+  }
 });
 
 // ========================

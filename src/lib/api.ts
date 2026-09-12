@@ -1,8 +1,33 @@
 import { SystemUnderStudy, InterviewSession, InterviewGuide, InterviewQuestion } from '../types';
 
+const TOKEN_KEY = 'reqvoice_auth_token';
+
+function getAuthToken(): string | null {
+  try {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(TOKEN_KEY);
+    }
+  } catch {}
+  return null;
+}
+
+function setAuthToken(token: string | null) {
+  try {
+    if (typeof window !== 'undefined') {
+      if (token) {
+        sessionStorage.setItem(TOKEN_KEY, token);
+      } else {
+        sessionStorage.removeItem(TOKEN_KEY);
+      }
+    }
+  } catch {}
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> || {}),
   };
 
@@ -25,28 +50,46 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   auth: {
+    getToken: getAuthToken,
+    clearToken: () => setAuthToken(null),
     me: () => request<{ user: any }>('/api/auth/me'),
-    login: (usernameOrEmail: string, password?: string) =>
-      request<{ success: boolean; user: any }>('/api/auth/login', {
+    login: async (usernameOrEmail: string, password?: string) => {
+      const res = await request<{ success: boolean; token?: string; user: any }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ usernameOrEmail, password }),
-      }),
-    register: (data: {
+      });
+      if (res.token) {
+        setAuthToken(res.token);
+      }
+      return res;
+    },
+    register: async (data: {
       name: string;
       username: string;
       email: string;
       password: string;
       role?: string;
       department?: string;
-    }) =>
-      request<{ success: boolean; user: any }>('/api/auth/register', {
+    }) => {
+      const res = await request<{ success: boolean; token?: string; user: any }>('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
-    logout: () =>
-      request<{ success: boolean }>('/api/auth/logout', {
-        method: 'POST',
-      }),
+      });
+      if (res.token) {
+        setAuthToken(res.token);
+      }
+      return res;
+    },
+    logout: async () => {
+      try {
+        await request<{ success: boolean }>('/api/auth/logout', {
+          method: 'POST',
+        });
+      } finally {
+        setAuthToken(null);
+      }
+      return { success: true };
+    },
     updateProfile: (data: {
       name?: string;
       username?: string;
@@ -228,5 +271,33 @@ export const api = {
       fetch('/api/database/mysql-schema').then((r) => r.text()),
     downloadMysqlDumpUrl: '/api/database/mysql-dump',
     downloadSingleReportUrl: '/api/database/export-single-report',
+  },
+  aiChat: {
+    getModels: () =>
+      request<{
+        models: Array<{
+          id: string;
+          name: string;
+          provider: string;
+          tagline: string;
+          speed: string;
+          contextWindow: string;
+          recommended: boolean;
+        }>;
+      }>('/api/ai/models'),
+    sendMessage: (data: {
+      message: string;
+      model?: string;
+      history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      systemContextId?: string;
+    }) =>
+      request<{
+        reply: string;
+        modelUsed: string;
+        timestamp: string;
+      }>('/api/ai/chat', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 };

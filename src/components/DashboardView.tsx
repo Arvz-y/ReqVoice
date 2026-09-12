@@ -10,8 +10,11 @@ import {
   Sparkles,
   Share2,
   CheckCircle2,
+  Bot,
+  Smartphone,
 } from 'lucide-react';
 import { InterviewSession, SystemUnderStudy, UserProfile } from '../types';
+import { MobileInstallBanner } from './MobileInstallBanner';
 
 interface DashboardViewProps {
   currentUser: UserProfile;
@@ -46,6 +49,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      {/* PWA Mobile Install Banner for Mobile Users */}
+      <MobileInstallBanner />
       
       {/* Concise Welcome Header */}
       <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-800 p-5 sm:p-7 shadow-xl">
@@ -76,6 +81,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
               <span>View Reports</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateToTab('chat')}
+              className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 text-xs font-semibold border border-indigo-700/60 transition-colors cursor-pointer"
+            >
+              <Bot className="w-3.5 h-3.5 text-indigo-400" />
+              <span>AI Chatbot</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateToTab('mobile')}
+              className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-violet-950/60 hover:bg-violet-900/60 text-violet-300 text-xs font-semibold border border-violet-700/60 transition-colors cursor-pointer"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-violet-400" />
+              <span>Mobile Edition</span>
             </button>
           </div>
         </div>

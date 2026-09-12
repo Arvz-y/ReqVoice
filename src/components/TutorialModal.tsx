@@ -33,12 +33,12 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({
 
   const steps = [
     {
-      title: 'Welcome to ReqVoice AI',
+      title: 'Welcome to reqvoiceV2',
       badge: 'Step 1 of 5 • Overview',
       icon: Sparkles,
       iconColor: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
       description:
-        'ReqVoice AI is an enterprise requirements discovery platform that captures stakeholder voice and video, performs simultaneous space-saving media compression, and extracts architectural requirements via Gemini AI.',
+        'reqvoiceV2 is an enterprise requirements discovery platform that captures stakeholder voice and video, performs simultaneous space-saving media compression, and extracts architectural requirements via Gemini AI.',
       highlights: [
         'Organize systems by lifecycle (Existing, Proposed, Modernization)',
         'Generate structured interview protocols across 5 requirement categories',

@@ -1,6 +1,6 @@
 {
-  "name": "ReqVoice AI",
-  "description": "AI-powered Systems Requirements Interview Intelligence Platform with Video Camera Capture, Space-Saving Compression, and Gemini AI Video Transcription.",
+  "name": "reqvoiceV2",
+  "description": "Enterprise Systems Requirements Interview Intelligence Platform V2 with Video Capture, SD Compression, and Gemini AI Verbatim Transcription.",
   "requestFramePermissions": [
     "camera",
     "microphone"

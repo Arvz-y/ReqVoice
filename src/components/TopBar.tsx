@@ -8,8 +8,11 @@ import {
   FileText,
   Mic,
   LayoutDashboard,
+  Bot,
+  Smartphone,
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { MobileInstallBanner } from './MobileInstallBanner';
 
 interface TopBarProps {
   currentUser: UserProfile;
@@ -40,8 +43,12 @@ export const TopBar: React.FC<TopBarProps> = ({
         return { title: 'Reports & Transcripts', icon: FileText, subtitle: 'Video evidence & AI transcripts' };
       case 'database':
         return { title: 'MySQL Database', icon: Database, subtitle: 'Relational storage & exports' };
+      case 'chat':
+        return { title: 'AI Chatbot', icon: Bot, subtitle: 'Multi-model requirements assistant' };
+      case 'mobile':
+        return { title: 'Mobile App Companion', icon: Smartphone, subtitle: 'Field device & PWA controls' };
       default:
-        return { title: 'Requirements Studio', icon: LayoutDashboard, subtitle: 'ReqVoice AI' };
+        return { title: 'Requirements Studio', icon: LayoutDashboard, subtitle: 'reqvoiceV2' };
     }
   };
 
@@ -94,6 +101,11 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Actions & User Avatar */}
       <div className="flex items-center space-x-2 shrink-0">
+        {/* Compact PWA Mobile Install Button */}
+        <div className="hidden sm:block">
+          <MobileInstallBanner compact={true} />
+        </div>
+
         {/* Tutorial Link */}
         <button
           onClick={onOpenTutorial}

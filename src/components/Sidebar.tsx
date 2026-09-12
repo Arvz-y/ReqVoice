@@ -5,6 +5,8 @@ import {
   Mic,
   FileText,
   Database,
+  Bot,
+  Smartphone,
   Video,
   ExternalLink,
   HelpCircle,
@@ -46,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'live', label: 'Interviewer Room', icon: Mic, badge: 'Active' },
     { id: 'reports', label: 'Reports & Transcripts', icon: FileText, badge: null },
     { id: 'database', label: 'MySQL Database', icon: Database, badge: 'SQL' },
+    { id: 'chat', label: 'AI Chatbot', icon: Bot, badge: 'Multi-AI' },
+    { id: 'mobile', label: 'Mobile App / PWA', icon: Smartphone, badge: 'PWA' },
   ];
 
   const avatarSrc =
@@ -80,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div
               onClick={() => setActiveTab('dashboard')}
               className="flex items-center space-x-3 cursor-pointer overflow-hidden group"
-              title="ReqVoice AI Dashboard"
+              title="reqvoiceV2 Dashboard"
             >
               <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
                 <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
@@ -92,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex flex-col min-w-0 transition-opacity duration-200">
                   <div className="flex items-center space-x-2">
                     <span className="font-heading text-lg font-bold tracking-tight text-white whitespace-nowrap">
-                      ReqVoice <span className="text-indigo-400">AI</span>
+                      reqvoice<span className="text-indigo-400">V2</span>
                     </span>
                     <span className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 uppercase tracking-wide">
                       MySQL
