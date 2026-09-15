@@ -14,12 +14,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  PanelLeftClose,
-  PanelLeftOpen,
+  X,
   User,
   Settings,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { useTheme } from './ThemeContext';
 
 interface SidebarProps {
   currentUser: UserProfile;
@@ -42,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenTutorial,
   onLogout,
 }) => {
+  const { theme, toggleTheme } = useTheme();
   const navItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard, badge: null },
     { id: 'systems', label: 'Systems & Guides', icon: Layers, badge: null },
@@ -77,13 +80,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         {/* Top Header / Brand */}
-        <div className="p-4 border-b border-slate-800/80">
-          <div className="flex items-center justify-between">
+        <div className={`p-4 border-b border-slate-800/80 ${!isOpen ? 'flex justify-center' : ''}`}>
+          <div className={`flex items-center ${isOpen ? 'justify-between' : 'justify-center'} w-full`}>
             
             {/* Logo and Brand Title */}
             <div
               onClick={() => setActiveTab('dashboard')}
-              className="flex items-center space-x-3 cursor-pointer overflow-hidden group"
+              className={`flex items-center ${isOpen ? 'space-x-3' : 'justify-center'} cursor-pointer overflow-hidden group`}
               title="reqvoiceV2 Dashboard"
             >
               <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -109,19 +112,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
 
-            {/* Collapse / Hide Sidebar Toggle */}
-            <button
-              id="btn-sidebar-toggle-top"
-              onClick={onToggle}
-              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer"
-              title={isOpen ? 'Hide Sidebar' : 'Deploy Sidebar'}
-            >
-              {isOpen ? (
-                <PanelLeftClose className="w-4 h-4" />
-              ) : (
-                <PanelLeftOpen className="w-4 h-4" />
-              )}
-            </button>
+            {/* Mobile-only close button for overlay drawer */}
+            {isOpen && (
+              <button
+                id="btn-sidebar-close-mobile"
+                onClick={onToggle}
+                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer lg:hidden"
+                title="Close Sidebar"
+                aria-label="Close Sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -248,16 +250,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Settings className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors shrink-0" />
               </div>
 
-              <button
-                onClick={onLogout}
-                className="w-full flex items-center justify-center space-x-2 py-2 rounded-xl bg-slate-900/60 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 text-xs font-medium transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  id="sidebar-btn-theme-toggle"
+                  onClick={toggleTheme}
+                  className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-medium transition-colors cursor-pointer"
+                  title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Light</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Dark</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={onLogout}
+                  className="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-xl bg-slate-900/60 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center space-y-2">
+              <button
+                id="sidebar-btn-theme-collapsed"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition-colors cursor-pointer relative group"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Moon className="w-4 h-4 text-indigo-500" />
+                )}
+                <div className="absolute left-full ml-3 px-2.5 py-1 bg-slate-900 text-slate-200 text-xs rounded-lg border border-slate-800 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">
+                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                </div>
+              </button>
+
               <button
                 onClick={onOpenProfile}
                 className="p-1 rounded-xl hover:ring-2 hover:ring-indigo-500 transition-all cursor-pointer relative group"

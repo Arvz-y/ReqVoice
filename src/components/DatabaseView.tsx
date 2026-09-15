@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Database,
   HardDrive,
-  Cpu,
   RefreshCw,
   Server,
   Download,
@@ -97,14 +96,14 @@ export const DatabaseView: React.FC = () => {
       </div>
 
       {/* Storage & Compression Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-1 shadow-sm">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Recordings</span>
             <Database className="w-4 h-4 text-indigo-400" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-white font-heading">
-            {dbStats?.storageMetrics?.totalVideosRecorded || 4}
+            {dbStats?.storageMetrics?.totalVideosRecorded || 0}
           </p>
           <p className="text-[11px] text-slate-500">VP8 compressed</p>
         </div>
@@ -115,7 +114,7 @@ export const DatabaseView: React.FC = () => {
             <HardDrive className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-emerald-400 font-heading">
-            {dbStats?.storageMetrics?.compressedStorageMb || 8.1} MB
+            {dbStats?.storageMetrics?.compressedStorageMb || 0} MB
           </p>
           <p className="text-[11px] text-slate-500">SD 640x480 @ 600 kbps</p>
         </div>
@@ -126,20 +125,9 @@ export const DatabaseView: React.FC = () => {
             <Server className="w-4 h-4 text-slate-400" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-slate-400 font-heading">
-            {dbStats?.storageMetrics?.estimatedRawStorageMb || 34.7} MB
+            {dbStats?.storageMetrics?.estimatedRawStorageMb || 0} MB
           </p>
           <p className="text-[11px] text-slate-500">Uncompressed weight</p>
-        </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-1 shadow-sm">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Space Saved</span>
-            <Cpu className="w-4 h-4 text-indigo-400" />
-          </div>
-          <p className="text-xl sm:text-2xl font-bold text-indigo-400 font-heading">
-            {dbStats?.storageMetrics?.averageCompressionRatio || '76.4%'}
-          </p>
-          <p className="text-[11px] text-slate-500">Bandwidth reduction</p>
         </div>
       </div>
 

@@ -18,11 +18,14 @@ import {
   Meh,
   ThumbsUp,
   Volume2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../lib/api';
 import { saveVideoBlob, deleteVideoBlob, calculateCompressionStats, blobToBase64 } from '../lib/videoStorage';
 import { InterviewQuestion } from '../types';
+import { useTheme } from './ThemeContext';
 
 interface IntervieweePortalProps {
   token: string;
@@ -33,6 +36,7 @@ export const IntervieweePortal: React.FC<IntervieweePortalProps> = ({
   token,
   onExitPreview,
 }) => {
+  const { theme, toggleTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionData, setSessionData] = useState<any>(null);
@@ -512,7 +516,8 @@ export const IntervieweePortal: React.FC<IntervieweePortalProps> = ({
               mimeType: recordedBlob.type || 'video/webm',
               compressionStats: compressionMetrics || calculateCompressionStats(recordingSeconds, recordedBlob.size),
               recordedAt: new Date().toISOString(),
-              videoUrl: recordedVideoUrl,
+              videoUrl: `/api/videos/${videoId}`,
+              base64Data: base64Media || undefined,
             }
           : undefined,
         aiTranscript: {
@@ -590,8 +595,33 @@ export const IntervieweePortal: React.FC<IntervieweePortalProps> = ({
     );
   }
 
-  const currentQ: InterviewQuestion | undefined = sessionData.questions[currentQIndex];
-  const totalQuestions = sessionData.questions.length;
+  const questions: InterviewQuestion[] = sessionData.questions || [];
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-4 shadow-2xl">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mx-auto flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-white">No Questions in Interview</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            This interview session does not contain any questions yet.
+          </p>
+          {onExitPreview && (
+            <button
+              onClick={onExitPreview}
+              className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 text-xs font-medium hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              Return to Workspace
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const currentQ: InterviewQuestion | undefined = questions[currentQIndex];
+  const totalQuestions = questions.length;
   const answeredCount = Object.keys(submittedAnswers).length;
   const progressPercent = Math.round((answeredCount / Math.max(1, totalQuestions)) * 100);
 
@@ -658,15 +688,31 @@ export const IntervieweePortal: React.FC<IntervieweePortalProps> = ({
               </div>
             </div>
 
-            {/* Brief Interviewer Profile */}
-            <div className="text-left sm:text-right text-xs">
-              <span className="text-[10px] text-slate-500 uppercase font-mono">Interviewer: </span>
-              <span className="font-semibold text-white">
-                {sessionData.interviewer?.name || 'Systems Lead'}
-              </span>
-              <span className="text-[11px] text-indigo-400 block">
-                {sessionData.interviewer?.role}
-              </span>
+            {/* Header Right: Interviewer Profile & Quick Theme Switcher */}
+            <div className="flex items-center space-x-3 self-start sm:self-auto">
+              <div className="text-left sm:text-right text-xs">
+                <span className="text-[10px] text-slate-500 uppercase font-mono">Interviewer: </span>
+                <span className="font-semibold text-white">
+                  {sessionData.interviewer?.name || 'Systems Lead'}
+                </span>
+                <span className="text-[11px] text-indigo-400 block">
+                  {sessionData.interviewer?.role}
+                </span>
+              </div>
+
+              <button
+                id="btn-portal-theme-toggle"
+                type="button"
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                ) : (
+                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+              </button>
             </div>
           </div>
 

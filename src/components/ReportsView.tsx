@@ -12,10 +12,12 @@ import {
   Meh,
   Copy,
   Layers,
+  Share2,
 } from 'lucide-react';
 import { InterviewSession, SystemUnderStudy, InterviewResponse } from '../types';
 import { api } from '../lib/api';
 import { getVideoBlobUrl } from '../lib/videoStorage';
+import { AnswerVideoPlayer } from './AnswerVideoPlayer';
 
 interface ReportsViewProps {
   systems: SystemUnderStudy[];
@@ -23,12 +25,15 @@ interface ReportsViewProps {
   selectedInterviewId: string | null;
   onRefreshInterviews: () => void;
   onOpenShareModal: (interview: InterviewSession) => void;
+  onNavigateToLive?: (interviewId: string) => void;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
   interviews,
   selectedInterviewId,
   onRefreshInterviews,
+  onOpenShareModal,
+  onNavigateToLive,
 }) => {
   const [activeSessionId, setActiveSessionId] = useState<string>(
     selectedInterviewId || (interviews[0]?.id ?? '')
@@ -50,7 +55,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const currentInterview = interviews.find((i) => i.id === activeSessionId) || interviews[0];
 
-  // Pre-load video object URLs from IndexedDB for this session's responses
+  // Pre-load video object URLs from IndexedDB or streaming endpoints
   useEffect(() => {
     if (!currentInterview?.responses) return;
 
@@ -62,8 +67,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           if (vid.videoUrl) {
             urls[qId] = vid.videoUrl;
           } else if (vid.id) {
-            const dbUrl = await getVideoBlobUrl(vid.id);
-            if (dbUrl) urls[qId] = dbUrl;
+            try {
+              const dbUrl = await getVideoBlobUrl(vid.id);
+              urls[qId] = dbUrl || `/api/videos/${vid.id}`;
+            } catch {
+              urls[qId] = `/api/videos/${vid.id}`;
+            }
           }
         }
       }
@@ -128,7 +137,35 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setTimeout(() => setCopiedQId(null), 2000);
   };
 
+  if (!interviews || interviews.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-heading">
+              Requirements & Video Transcripts
+            </h2>
+            <p className="text-xs text-slate-400">
+              Review stakeholder video responses, Gemini transcriptions, and synthesized specifications
+            </p>
+          </div>
+        </div>
+
+        <div className="p-8 sm:p-12 rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-4 max-w-xl mx-auto my-8 shadow-xl">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+            <FileText className="w-6 h-6" />
+          </div>
+          <h3 className="text-lg font-bold text-white font-heading">No Interview Sessions Yet</h3>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+            There are no interview sessions logged in your account space yet. Launch a stakeholder interview from the Systems view to record evidence and generate AI-synthesized specifications.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const report = currentInterview?.summaryReport;
+  const questionsList = currentInterview?.questions || [];
 
   return (
     <div className="space-y-6">
@@ -169,7 +206,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
       </div>
 
-      {activeTab === 'individual' ? (
+      {activeTab === 'individual' && currentInterview ? (
         <div className="space-y-6">
           
           {/* Controls Bar: Select Interview Session */}
@@ -189,7 +226,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
+            <div className="flex items-center flex-wrap gap-2 shrink-0 self-end sm:self-auto">
+              {onNavigateToLive && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToLive(currentInterview.id)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span>Live Monitor</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => onOpenShareModal(currentInterview)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Candidate Link</span>
+              </button>
+
               <button
                 onClick={handleReSynthesizeReport}
                 disabled={isSynthesizing || !currentInterview}
@@ -208,6 +265,32 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Pending Report Banner if not yet synthesized */}
+          {!report && (
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-md space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <h3 className="text-sm font-bold text-white">Executive Summary In Progress</h3>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    A synthesis report has not been generated for this session yet. Click "Generate AI Report" to synthesize requirements.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReSynthesizeReport}
+                  disabled={isSynthesizing}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{isSynthesizing ? 'Synthesizing...' : 'Generate AI Report'}</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Executive Summary Card */}
           {report && (
@@ -312,13 +395,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </div>
 
               <span className="px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
-                {Object.keys(currentInterview.responses || {}).length} / {currentInterview.questions.length} Answered
+                {Object.keys(currentInterview.responses || {}).length} / {questionsList.length} Answered
               </span>
             </div>
 
             {/* Questions List */}
             <div className="space-y-5">
-              {currentInterview.questions.map((q, qIndex) => {
+              {questionsList.map((q, qIndex) => {
                 const response: InterviewResponse | undefined = currentInterview.responses?.[q.id];
                 const videoData = response?.videoRecording;
                 const transcriptData = response?.aiTranscript;
@@ -378,28 +461,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           )}
                         </div>
 
-                        {/* Video Frame */}
-                        <div className="relative aspect-video rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shadow-inner">
-                          {videoUrl ? (
-                            <video
-                              src={videoUrl}
-                              controls
-                              playsInline
-                              preload="metadata"
-                              className="w-full h-full object-cover bg-black"
-                            />
-                          ) : videoData ? (
-                            <div className="text-center p-4 space-y-1.5">
-                              <Video className="w-7 h-7 text-indigo-400 mx-auto animate-pulse" />
-                              <p className="text-xs text-slate-300 font-medium">Loading stream...</p>
-                            </div>
-                          ) : (
-                            <div className="text-center p-6 space-y-1 text-slate-500">
-                              <Video className="w-6 h-6 mx-auto opacity-30" />
-                              <p className="text-xs">No video recorded</p>
-                            </div>
-                          )}
-                        </div>
+                        {/* Enhanced Video Player with Speed Control, Fallback Audio & Offline Download */}
+                        <AnswerVideoPlayer
+                          videoRecording={videoData}
+                          fallbackVideoUrl={videoUrl}
+                          transcriptText={transcriptData?.transcript}
+                          speakerName={currentInterview.intervieweeName}
+                        />
                       </div>
 
                       {/* Right: AI Transcription Section */}
@@ -547,15 +615,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       {inv.summaryReport?.userExpectations?.[0] || 'Reliable execution'}
                     </td>
                     <td className="py-3 px-4 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          setActiveSessionId(inv.id);
-                          setActiveTab('individual');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] transition-colors cursor-pointer"
-                      >
-                        View Report
-                      </button>
+                      <div className="flex items-center justify-end space-x-1.5">
+                        {onNavigateToLive && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToLive(inv.id)}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 text-[11px] font-medium transition-colors cursor-pointer"
+                          >
+                            Live Room
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSessionId(inv.id);
+                            setActiveTab('individual');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] transition-colors cursor-pointer"
+                        >
+                          View Report
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

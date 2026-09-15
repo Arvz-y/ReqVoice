@@ -10,9 +10,12 @@ import {
   LayoutDashboard,
   Bot,
   Smartphone,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { MobileInstallBanner } from './MobileInstallBanner';
+import { useTheme } from './ThemeContext';
 
 interface TopBarProps {
   currentUser: UserProfile;
@@ -31,6 +34,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenProfile,
   onOpenTutorial,
 }) => {
+  const { theme, toggleTheme } = useTheme();
+
   const getTabDetails = (tab: string) => {
     switch (tab) {
       case 'dashboard':
@@ -66,21 +71,14 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           id="btn-deploy-sidebar"
           onClick={onToggleSidebar}
-          className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
-            isSidebarOpen
-              ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
-              : 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-600 hover:text-white shadow-sm'
-          }`}
-          title={isSidebarOpen ? 'Hide Sidebar Menu' : 'Open Sidebar Menu'}
-          aria-label={isSidebarOpen ? 'Hide Sidebar Menu' : 'Open Sidebar Menu'}
+          className="p-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
+          title={isSidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
+          aria-label={isSidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
         >
           {isSidebarOpen ? (
             <PanelLeftClose className="w-4 h-4" />
           ) : (
-            <>
-              <PanelLeftOpen className="w-4 h-4" />
-              <span className="text-xs font-semibold hidden md:inline">Menu</span>
-            </>
+            <PanelLeftOpen className="w-4 h-4" />
           )}
         </button>
 
@@ -105,6 +103,27 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="hidden sm:block">
           <MobileInstallBanner compact={true} />
         </div>
+
+        {/* Quick Light / Dark Mode Toggle Button */}
+        <button
+          id="btn-quick-theme-toggle"
+          onClick={toggleTheme}
+          className="flex items-center space-x-1.5 p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-all cursor-pointer shadow-sm group"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-4 h-4 text-amber-400 group-hover:rotate-45 transition-transform" />
+              <span className="text-xs font-semibold hidden md:inline text-slate-300 group-hover:text-white">Light</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4 text-indigo-500 group-hover:-rotate-12 transition-transform" />
+              <span className="text-xs font-semibold hidden md:inline text-slate-700 group-hover:text-slate-900">Dark</span>
+            </>
+          )}
+        </button>
 
         {/* Tutorial Link */}
         <button

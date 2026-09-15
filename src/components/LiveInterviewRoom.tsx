@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { InterviewSession, InterviewQuestion } from '../types';
 import { getVideoBlobUrl } from '../lib/videoStorage';
+import { AnswerVideoPlayer } from './AnswerVideoPlayer';
 
 interface LiveInterviewRoomProps {
   interview: InterviewSession;
@@ -37,11 +38,12 @@ export const LiveInterviewRoom: React.FC<LiveInterviewRoomProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const totalQuestions = interview.questions.length;
-  const currentQ: InterviewQuestion | undefined = interview.questions[activeQuestionIndex];
-  const currentResponse = currentQ ? interview.responses?.[currentQ.id] : undefined;
+  const questions = interview?.questions || [];
+  const totalQuestions = questions.length;
+  const currentQ: InterviewQuestion | undefined = questions[activeQuestionIndex];
+  const currentResponse = currentQ ? interview?.responses?.[currentQ.id] : undefined;
 
-  const answeredCount = Object.keys(interview.responses || {}).length;
+  const answeredCount = Object.keys(interview?.responses || {}).length;
   const isAllAnswered = totalQuestions > 0 && answeredCount >= totalQuestions;
 
   // Resolve video blob URLs from IndexedDB for any recorded video
@@ -58,8 +60,10 @@ export const LiveInterviewRoom: React.FC<LiveInterviewRoomProps> = ({
           } else if (rec.id) {
             try {
               const url = await getVideoBlobUrl(rec.id);
-              if (url) urls[qId] = url;
-            } catch {}
+              urls[qId] = url || `/api/videos/${rec.id}`;
+            } catch {
+              urls[qId] = `/api/videos/${rec.id}`;
+            }
           }
         }
       }
@@ -112,6 +116,20 @@ export const LiveInterviewRoom: React.FC<LiveInterviewRoomProps> = ({
         return 'bg-amber-500/10 border-amber-500/30 text-amber-300';
     }
   };
+
+  if (!interview || totalQuestions === 0) {
+    return (
+      <div className="p-8 sm:p-12 rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-4 shadow-xl">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+          <Clock className="w-6 h-6" />
+        </div>
+        <h3 className="text-lg font-bold text-white">No Questions in Session</h3>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+          This interview session has no registered questions. You can launch or configure a session with questions from the Overview or Systems page.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 font-sans">
@@ -325,18 +343,14 @@ export const LiveInterviewRoom: React.FC<LiveInterviewRoomProps> = ({
               {currentResponse ? (
                 <div className="space-y-4">
                   
-                  {/* Video Playback */}
+                  {/* Video Playback & Alternative Review Player */}
                   {(videoBlobUrls[currentQ.id] || currentResponse.videoRecording) && (
-                    <div className="space-y-2">
-                      <div className="relative aspect-video rounded-xl bg-black border border-slate-800 overflow-hidden shadow-inner flex items-center justify-center">
-                        <video
-                          src={videoBlobUrls[currentQ.id] || currentResponse.videoRecording?.videoUrl}
-                          controls
-                          playsInline
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    </div>
+                    <AnswerVideoPlayer
+                      videoRecording={currentResponse.videoRecording}
+                      fallbackVideoUrl={videoBlobUrls[currentQ.id]}
+                      transcriptText={currentResponse.aiTranscript?.transcript || currentResponse.responseText}
+                      speakerName={interview.intervieweeName}
+                    />
                   )}
 
                   {/* AI Verbatim Transcript Card */}

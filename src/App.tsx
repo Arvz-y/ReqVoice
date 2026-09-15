@@ -295,6 +295,10 @@ export function App() {
               selectedInterviewId={selectedInterviewId}
               onRefreshInterviews={handleRefreshInterviews}
               onOpenShareModal={(inv) => setShareModalSession(inv)}
+              onNavigateToLive={(invId) => {
+                setSelectedInterviewId(invId);
+                setActiveTab('live');
+              }}
             />
           )}
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   Plus,
@@ -6,8 +6,10 @@ import {
   ArrowRight,
   CheckCircle2,
   Users,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
-import { SystemUnderStudy, InterviewQuestion } from '../types';
+import { SystemUnderStudy, InterviewQuestion, InterviewType } from '../types';
 import { api } from '../lib/api';
 
 interface SystemsViewProps {
@@ -23,6 +25,8 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedSystem, setSelectedSystem] = useState<SystemUnderStudy | null>(systems[0] || null);
+  const [systemToDelete, setSystemToDelete] = useState<SystemUnderStudy | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newSystemName, setNewSystemName] = useState('');
   const [newSystemType, setNewSystemType] = useState('Enterprise Application');
   const [newSystemDesc, setNewSystemDesc] = useState('');
@@ -32,6 +36,15 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
   // AI question suggestions
   const [suggestedQuestions, setSuggestedQuestions] = useState<InterviewQuestion[]>([]);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [interviewType, setInterviewType] = useState<InterviewType>('Semi-Structured');
+
+  useEffect(() => {
+    if (selectedSystem && !systems.some((s) => s.id === selectedSystem.id)) {
+      setSelectedSystem(systems[0] || null);
+    } else if (!selectedSystem && systems.length > 0) {
+      setSelectedSystem(systems[0]);
+    }
+  }, [systems, selectedSystem]);
 
   const handleCreateSystem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +71,24 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
     }
   };
 
+  const handleDeleteSystem = async () => {
+    if (!systemToDelete) return;
+    setIsDeleting(true);
+    try {
+      await api.systems.delete(systemToDelete.id);
+      onRefreshSystems();
+      if (selectedSystem?.id === systemToDelete.id) {
+        const remaining = systems.filter((s) => s.id !== systemToDelete.id);
+        setSelectedSystem(remaining[0] || null);
+      }
+      setSystemToDelete(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to remove system');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleGenerateQuestions = async () => {
     if (!selectedSystem) return;
     setIsSuggesting(true);
@@ -66,6 +97,7 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
         systemName: selectedSystem.name,
         systemType: selectedSystem.type,
         role: selectedSystem.targetRoles[0] || 'Stakeholder',
+        interviewType: interviewType,
       });
       setSuggestedQuestions(res.questions);
     } catch (err: any) {
@@ -127,9 +159,23 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-white truncate">{sys.name}</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
-                      {sys.lifecycleState}
-                    </span>
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        {sys.lifecycleState}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSystemToDelete(sys);
+                        }}
+                        title="Remove System"
+                        aria-label={`Remove system ${sys.name}`}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{sys.description}</p>
                   <div className="text-[10px] text-slate-500 font-medium">
@@ -157,13 +203,24 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
                   <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">{selectedSystem.description}</p>
                 </div>
 
-                <button
-                  onClick={() => onLaunchInterviewForSystem(selectedSystem)}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
-                >
-                  <span>Start Interview</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSystemToDelete(selectedSystem)}
+                    className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove System</span>
+                  </button>
+
+                  <button
+                    onClick={() => onLaunchInterviewForSystem(selectedSystem)}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                  >
+                    <span>Start Interview</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Roles */}
@@ -190,7 +247,7 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
                       <span>Gemini AI Question Protocol</span>
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      Auto-generate categorized questions covering workflows and pain points
+                      Auto-generate categorized questions according to the selected interview type
                     </p>
                   </div>
 
@@ -199,8 +256,44 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
                     disabled={isSuggesting}
                     className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-sm transition-colors cursor-pointer disabled:opacity-50 self-start sm:self-auto shrink-0"
                   >
-                    <span>{isSuggesting ? 'Generating...' : 'Generate with AI'}</span>
+                    <span>{isSuggesting ? 'Generating...' : `Generate ${interviewType}`}</span>
                   </button>
+                </div>
+
+                {/* Interview Type Selection */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Target Interview Protocol:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {(['Structured', 'Semi-Structured', 'Unstructured'] as InterviewType[]).map((typeKey, idx) => {
+                      const isSelected = interviewType === typeKey;
+                      return (
+                        <button
+                          key={typeKey}
+                          type="button"
+                          onClick={() => setInterviewType(typeKey)}
+                          className={`p-2 rounded-xl text-left border text-xs transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-800 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500/50'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center space-x-1.5">
+                            <span className="text-[10px] text-indigo-400 font-mono">{idx + 1}.</span>
+                            <span>{typeKey}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            {typeKey === 'Structured'
+                              ? 'Rigid, quantitative SLA metrics'
+                              : typeKey === 'Semi-Structured'
+                              ? 'Guided core + flexible probes'
+                              : 'Open-ended vision & narrative'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {suggestedQuestions.length > 0 && (
@@ -303,6 +396,47 @@ export const SystemsView: React.FC<SystemsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete System Confirmation */}
+      {systemToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="max-w-md w-full my-6 p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-white font-heading">Remove System Under Study</h3>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Are you sure you want to remove <span className="font-semibold text-white">"{systemToDelete.name}"</span>?
+            </p>
+            <p className="text-xs text-rose-400/90 leading-relaxed bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl">
+              This action will permanently delete this system profile and all corresponding interview questionnaire records associated with it.
+            </p>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setSystemToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteSystem}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? 'Removing...' : 'Confirm Removal'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

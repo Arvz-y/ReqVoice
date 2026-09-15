@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Lock, Mail, User, Shield, ArrowRight, Eye, EyeOff, CheckCircle2, Sparkles, Building, Briefcase } from 'lucide-react';
+import { Lock, Mail, User, Shield, ArrowRight, Eye, EyeOff, CheckCircle2, Sparkles, Building, Briefcase, Sun, Moon } from 'lucide-react';
 import { api } from '../lib/api';
 import { UserProfile } from '../types';
+import { useTheme } from './ThemeContext';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
+  const { theme, toggleTheme } = useTheme();
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,18 +61,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleFillDemo = () => {
-    setUsernameOrEmail('sophia_reynolds');
-    setPassword('password123');
-    setErrorMessage(null);
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans">
       
       {/* Background ambient lighting */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-indigo-600/10 blur-[130px] rounded-full pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-emerald-600/10 blur-[100px] rounded-full pointer-events-none" />
+
+      <div className="absolute top-5 right-5 z-20">
+        <button
+          id="btn-auth-theme-toggle"
+          type="button"
+          onClick={toggleTheme}
+          className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-xs font-semibold shadow-md transition-all cursor-pointer backdrop-blur-md"
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-3.5 h-3.5 text-amber-400" />
+              <span>Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Dark Mode</span>
+            </>
+          )}
+        </button>
+      </div>
 
       <div className="max-w-md w-full relative z-10 space-y-6">
         
@@ -209,7 +227,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                     <input
                       type="text"
                       required
-                      placeholder="sophia_reynolds or s.reynolds@reqvoice.systems"
+                      placeholder="Username or email address"
                       value={usernameOrEmail}
                       onChange={(e) => setUsernameOrEmail(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
@@ -218,16 +236,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-slate-300">Password</label>
-                    <button
-                      type="button"
-                      onClick={handleFillDemo}
-                      className="text-[11px] text-indigo-400 hover:underline"
-                    >
-                      Load Demo Credentials
-                    </button>
-                  </div>
+                  <label className="text-xs font-semibold text-slate-300">Password</label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
@@ -288,20 +297,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess }) => {
             )}
           </div>
 
-        </div>
-
-        {/* Demo hints */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/60 text-center space-y-1">
-          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span>Demo: <strong className="text-slate-200">sophia_reynolds</strong> / <strong className="text-slate-200">password123</strong></span>
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-sans cursor-pointer ml-2"
-            >
-              Fill Demo
-            </button>
-          </div>
         </div>
 
       </div>

@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
@@ -32,6 +33,7 @@ function getGeminiClient(): GoogleGenAI | null {
 // In-memory Database with rich seed data for Requirements Gathering
 interface StoredSystem {
   id: string;
+  userId: string;
   name: string;
   type: string;
   description: string;
@@ -50,6 +52,7 @@ interface StoredQuestion {
 
 interface StoredInterview {
   id: string;
+  userId: string;
   systemId: string;
   systemName: string;
   interviewerName: string;
@@ -61,6 +64,7 @@ interface StoredInterview {
   intervieweeDept?: string;
   shareToken: string;
   status: "scheduled" | "in_progress" | "completed";
+  interviewType?: "Structured" | "Semi-Structured" | "Unstructured";
   questions: StoredQuestion[];
   responses: Record<string, any>;
   summaryReport?: any;
@@ -68,9 +72,83 @@ interface StoredInterview {
   completedAt?: string;
 }
 
-const DEFAULT_QUESTIONS: StoredQuestion[] = [
+interface StoredActivity {
+  id: string;
+  userId: string;
+  type: "session_created" | "response_recorded" | "interview_completed" | "system_added" | "system_deleted" | "report_generated" | "login";
+  title: string;
+  description: string;
+  timestamp: string;
+}
+
+interface StoredVideo {
+  id: string;
+  interviewId?: string;
+  questionId?: string;
+  mimeType: string;
+  buffer: Buffer;
+  durationSeconds: number;
+  recordedAt: string;
+}
+
+// 1. Structured Questions (Standardized, quantifiable, rigid sequence, parameter & SLA focused)
+const STRUCTURED_QUESTIONS: StoredQuestion[] = [
   {
-    id: "q-1",
+    id: "sq-1",
+    category: "workflow",
+    questionText: "What are the exact step-by-step inputs, validation checks, and data transformations executed in this operational sequence?",
+    rationale: "Map precise sequential data flow and operational business rules without ambiguity",
+    suggestedFollowups: [
+      "What is the exact maximum character length and format for each input parameter?",
+      "Which fields require database uniqueness constraints or checksum validations?",
+    ],
+  },
+  {
+    id: "sq-2",
+    category: "pain_point",
+    questionText: "What is the measured frequency of system failures per week, and what is the exact average downtime in minutes?",
+    rationale: "Quantify operational incident impact, MTTR, and failure severity with numeric metrics",
+    suggestedFollowups: [
+      "What percentage of failure incidents result in manual data recovery procedures?",
+      "What is the measured financial or labor cost per hour of system unavailability?",
+    ],
+  },
+  {
+    id: "sq-3",
+    category: "expectation",
+    questionText: "What are the mandatory numerical SLA targets for API response latency (< ms) and peak concurrent user throughput?",
+    rationale: "Establish quantifiable non-functional criteria and SLA compliance thresholds",
+    suggestedFollowups: [
+      "What is the maximum allowable latency under 99th percentile peak load?",
+      "What is the target uptime percentage commitment (e.g. 99.9% vs 99.99%)?",
+    ],
+  },
+  {
+    id: "sq-4",
+    category: "limitation",
+    questionText: "Which specific database locks, third-party API rate limits, or batch window durations restrict current transaction throughput?",
+    rationale: "Identify hard technical boundaries and architectural concurrency caps",
+    suggestedFollowups: [
+      "What is the exact query timeout threshold currently configured in the database?",
+      "Which downstream endpoints throttle batch synchronization requests?",
+    ],
+  },
+  {
+    id: "sq-5",
+    category: "desired_feature",
+    questionText: "What are the top 3 functional capabilities required for Phase 1 acceptance criteria, ranked in strict order of priority?",
+    rationale: "Establish formal ISO/IEC requirements acceptance baseline and scoring criteria",
+    suggestedFollowups: [
+      "What quantitative metric will verify successful deployment of each capability?",
+      "Which capability is a non-negotiable blocking dependency for production go-live?",
+    ],
+  },
+];
+
+// 2. Semi-Structured Questions (Guided core framework with exploratory follow-up probes)
+const SEMI_STRUCTURED_QUESTIONS: StoredQuestion[] = [
+  {
+    id: "ssq-1",
     category: "workflow",
     questionText: "Can you walk me through your daily routine workflows and primary tasks in the system?",
     rationale: "Establish baseline operational cadence, user tasks, and time allocations",
@@ -80,7 +158,7 @@ const DEFAULT_QUESTIONS: StoredQuestion[] = [
     ],
   },
   {
-    id: "q-2",
+    id: "ssq-2",
     category: "pain_point",
     questionText: "What are the most frustrating bottlenecks, manual workarounds, or errors you encounter?",
     rationale: "Identify acute friction points, data re-entry, and process vulnerabilities",
@@ -90,7 +168,7 @@ const DEFAULT_QUESTIONS: StoredQuestion[] = [
     ],
   },
   {
-    id: "q-3",
+    id: "ssq-3",
     category: "expectation",
     questionText: "What are your core expectations for system latency, accessibility, and user ergonomics?",
     rationale: "Discover non-functional requirements, SLA benchmarks, and mobile/desktop expectations",
@@ -100,7 +178,7 @@ const DEFAULT_QUESTIONS: StoredQuestion[] = [
     ],
   },
   {
-    id: "q-4",
+    id: "ssq-4",
     category: "limitation",
     questionText: "Where does the current architecture fail or prevent you from achieving departmental goals?",
     rationale: "Expose architectural boundaries, database lockups, or batch synchronization lags",
@@ -109,7 +187,7 @@ const DEFAULT_QUESTIONS: StoredQuestion[] = [
     ],
   },
   {
-    id: "q-5",
+    id: "ssq-5",
     category: "desired_feature",
     questionText: "If you could prioritize three essential features for the new system, what would they be?",
     rationale: "Collect prioritized stakeholder wishlist and architectural feasibility weightings",
@@ -119,9 +197,66 @@ const DEFAULT_QUESTIONS: StoredQuestion[] = [
   },
 ];
 
+// 3. Unstructured Questions (Open-ended conversational inquiry, strategic vision & narratives)
+const UNSTRUCTURED_QUESTIONS: StoredQuestion[] = [
+  {
+    id: "uq-1",
+    category: "workflow",
+    questionText: "From your perspective, how does your department's day-to-day work fit into the bigger mission of the organization?",
+    rationale: "Explore high-level stakeholder context, organizational environment, and collaborative dynamics",
+    suggestedFollowups: [
+      "How has the nature of your team's day-to-day work evolved over recent years?",
+      "Where do the most interesting informal collaborations happen between teams?",
+    ],
+  },
+  {
+    id: "uq-2",
+    category: "pain_point",
+    questionText: "What aspects of the current technology cause the most friction or headaches for your team on a human level?",
+    rationale: "Uncover emotional pain points, team fatigue, and hidden informal workarounds",
+    suggestedFollowups: [
+      "If you could wave a magic wand and eliminate one daily annoyance, what would it be?",
+      "What workaround has your team invented that management might not even know about?",
+    ],
+  },
+  {
+    id: "uq-3",
+    category: "expectation",
+    questionText: "If this new system were an absolute dream to use every day, what would that feel like for your team?",
+    rationale: "Discover strategic user vision, qualitative delight factors, and emotional expectations",
+    suggestedFollowups: [
+      "How would you measure whether this project was a runaway success one year from now?",
+      "What would give your stakeholders complete confidence in adopting this platform?",
+    ],
+  },
+  {
+    id: "uq-4",
+    category: "limitation",
+    questionText: "What organizational or technological hurdles seem to hold your department back the most right now?",
+    rationale: "Surface unspoken cultural, policy, and systemic barriers to organizational change",
+    suggestedFollowups: [
+      "Are there legacy policies or habits that might clash with modern workflows?",
+      "Where do you feel the biggest gap between technological potential and daily reality?",
+    ],
+  },
+  {
+    id: "uq-5",
+    category: "desired_feature",
+    questionText: "Looking forward, what kind of innovations or superpowers would make the biggest meaningful difference in your work life?",
+    rationale: "Gather open-ended aspirational capabilities, innovation ideas, and strategic roadmap value",
+    suggestedFollowups: [
+      "What new opportunities could your team pursue if routine manual work was automated?",
+      "What exciting ideas have team members proposed that couldn't be built previously?",
+    ],
+  },
+];
+
+const DEFAULT_QUESTIONS: StoredQuestion[] = SEMI_STRUCTURED_QUESTIONS;
+
 let systemsDb: StoredSystem[] = [
   {
     id: "sys-omnicare-ehr",
+    userId: "usr-architect-01",
     name: "OmniCare Hospital Information System (EHR)",
     type: "Hospital Information & EMR",
     description: "Enterprise Electronic Health Record and Clinical Care platform handling inpatient admissions, medication administration records, and diagnostic lab scheduling.",
@@ -131,6 +266,7 @@ let systemsDb: StoredSystem[] = [
   },
   {
     id: "sys-apex-logistics",
+    userId: "usr-architect-01",
     name: "Apex Global Supply Chain & Inventory ERP",
     type: "Supply Chain & Inventory Management",
     description: "Multi-warehouse real-time inventory tracking, vendor replenishment scheduling, automated stock auditing, and carrier dispatch logistics.",
@@ -143,11 +279,12 @@ let systemsDb: StoredSystem[] = [
 let interviewsDb: StoredInterview[] = [
   {
     id: "int-ehr-001",
+    userId: "usr-architect-01",
     systemId: "sys-omnicare-ehr",
     systemName: "OmniCare Hospital Information System (EHR)",
-    interviewerName: "Elena Vance",
-    interviewerRole: "Lead Systems Analyst",
-    interviewerDept: "Healthcare Systems Architecture",
+    interviewerName: "Dr. Sophia Reynolds",
+    interviewerRole: "Principal Requirements Architect",
+    interviewerDept: "Enterprise Systems Engineering",
     intervieweeName: "Dr. Marcus Chen",
     intervieweeRole: "Chief of Emergency Medicine",
     intervieweeEmail: "m.chen@omnicarehealth.org",
@@ -166,6 +303,7 @@ let interviewsDb: StoredInterview[] = [
         audioDurationSeconds: 42,
         videoRecording: {
           id: "vid-q1",
+          videoUrl: "/api/videos/vid-q1",
           durationSeconds: 42,
           mimeType: "video/webm",
           compressionStats: {
@@ -204,6 +342,7 @@ let interviewsDb: StoredInterview[] = [
         audioDurationSeconds: 38,
         videoRecording: {
           id: "vid-q2",
+          videoUrl: "/api/videos/vid-q2",
           durationSeconds: 38,
           mimeType: "video/webm",
           compressionStats: {
@@ -242,6 +381,7 @@ let interviewsDb: StoredInterview[] = [
         audioDurationSeconds: 31,
         videoRecording: {
           id: "vid-q3",
+          videoUrl: "/api/videos/vid-q3",
           durationSeconds: 31,
           mimeType: "video/webm",
           compressionStats: {
@@ -318,6 +458,39 @@ let interviewsDb: StoredInterview[] = [
   },
 ];
 
+let activitiesDb: StoredActivity[] = [];
+
+const demoVideosDir = path.join(process.cwd(), "public", "demo-videos");
+const videosStore = new Map<string, StoredVideo>();
+
+function initDemoVideos() {
+  try {
+    if (!fs.existsSync(demoVideosDir)) {
+      fs.mkdirSync(demoVideosDir, { recursive: true });
+    }
+    const seedFiles = [
+      { id: "vid-q1", file: "vid-q1.webm", dur: 42 },
+      { id: "vid-q2", file: "vid-q2.webm", dur: 38 },
+      { id: "vid-q3", file: "vid-q3.webm", dur: 31 },
+    ];
+    seedFiles.forEach((item) => {
+      const fullPath = path.join(demoVideosDir, item.file);
+      if (fs.existsSync(fullPath)) {
+        videosStore.set(item.id, {
+          id: item.id,
+          mimeType: "video/webm",
+          buffer: fs.readFileSync(fullPath),
+          durationSeconds: item.dur,
+          recordedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        });
+      }
+    });
+  } catch (err) {
+    console.warn("Could not preload demo videos:", err);
+  }
+}
+initDemoVideos();
+
 interface StoredUser {
   id: string;
   name: string;
@@ -337,15 +510,15 @@ let usersDb: StoredUser[] = [
   {
     id: "usr-architect-01",
     name: "Dr. Sophia Reynolds",
-    username: "sophia_reynolds",
-    email: "darkwarriorsociety98@gmail.com",
+    username: "demo_architect",
+    email: "demo.architect@reqvoice.systems",
     role: "Principal Requirements Architect",
     department: "Enterprise Systems Engineering",
     password: "password123",
     avatarUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80",
     bio: "Lead systems analyst specializing in enterprise health and supply chain architectures.",
-    isFirstTime: true,
-    hasCompletedTutorial: false,
+    isFirstTime: false,
+    hasCompletedTutorial: true,
     createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
   },
 ];
@@ -443,6 +616,30 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
   };
 
   usersDb.push(newUser);
+
+  // Initialize a personalized default system workspace for the new user
+  const initialSystem: StoredSystem = {
+    id: `sys-${Date.now().toString(36)}`,
+    userId: newUser.id,
+    name: `${newUser.department || "Enterprise"} Portal Modernization`,
+    type: "Enterprise Information Architecture",
+    description: `Requirements discovery and stakeholder feedback repository for ${newUser.name}.`,
+    lifecycleState: "proposed",
+    targetRoles: [newUser.role || "Requirements Analyst", "Key Stakeholder", "Operations Manager"],
+    createdAt: new Date().toISOString(),
+  };
+  systemsDb.unshift(initialSystem);
+
+  // Initialize first activity record for this isolated user
+  activitiesDb.unshift({
+    id: `act-${Date.now().toString(36)}`,
+    userId: newUser.id,
+    type: "login",
+    title: "Account Space Initialized",
+    description: `Welcome to ReqVoice, ${newUser.name}. Your private requirements workspace has been configured.`,
+    timestamp: new Date().toISOString(),
+  });
+
   const token = `rv2_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
   activeSessions.set(token, newUser);
   res.json({ success: true, token, user: sanitizeUser(newUser) });
@@ -483,11 +680,12 @@ app.put("/api/auth/profile", (req: Request, res: Response) => {
   if (avatarUrl) user.avatarUrl = avatarUrl.trim();
   if (bio !== undefined) user.bio = bio.trim();
 
-  // Also update corresponding interviewer names in interview records
+  // Also update corresponding interviewer names in interview records belonging to this user
   interviewsDb.forEach((inv) => {
-    if (inv.interviewerName === user.name) {
-      inv.interviewerRole = user.role;
-      inv.interviewerDept = user.department;
+    if (inv.userId === user.id) {
+      if (name) inv.interviewerName = user.name;
+      if (role) inv.interviewerRole = user.role;
+      if (department) inv.interviewerDept = user.department;
     }
   });
 
@@ -530,12 +728,24 @@ app.post("/api/auth/tutorial-completed", (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// 2. Systems routes
+// 2. Systems routes (Account-Isolated)
 app.get("/api/systems", (req: Request, res: Response) => {
-  res.json({ systems: systemsDb });
+  const user = getAuthUser(req);
+  if (!user) {
+    res.json({ systems: [] });
+    return;
+  }
+  const userSystems = systemsDb.filter((s) => s.userId === user.id);
+  res.json({ systems: userSystems });
 });
 
 app.post("/api/systems", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   const { name, type, description, lifecycleState, targetRoles } = req.body;
   if (!name) {
     res.status(400).json({ error: "System name is required." });
@@ -543,7 +753,8 @@ app.post("/api/systems", (req: Request, res: Response) => {
   }
   const newSystem: StoredSystem = {
     id: `sys-${Date.now().toString(36)}`,
-    name,
+    userId: user.id,
+    name: name.trim(),
     type: type || "Custom Information Architecture",
     description: description || "",
     lifecycleState: lifecycleState || "proposed",
@@ -551,22 +762,80 @@ app.post("/api/systems", (req: Request, res: Response) => {
     createdAt: new Date().toISOString(),
   };
   systemsDb.unshift(newSystem);
+
+  activitiesDb.unshift({
+    id: `act-${Date.now().toString(36)}`,
+    userId: user.id,
+    type: "system_added",
+    title: `System Registered: ${newSystem.name}`,
+    description: `Added system under study: ${newSystem.name} (${newSystem.lifecycleState})`,
+    timestamp: new Date().toISOString(),
+  });
+
   res.json({ system: newSystem });
 });
 
-// 3. Interviews routes
+app.delete("/api/systems/:id", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const systemId = req.params.id;
+  const sysIndex = systemsDb.findIndex((s) => s.id === systemId);
+  if (sysIndex === -1) {
+    res.status(404).json({ error: "System not found." });
+    return;
+  }
+
+  const sys = systemsDb[sysIndex];
+  if (sys.userId !== user.id) {
+    res.status(403).json({ error: "Access denied. You can only remove systems registered in your account." });
+    return;
+  }
+
+  const removedSystem = systemsDb.splice(sysIndex, 1)[0];
+
+  // Also remove associated interviews if any
+  interviewsDb = interviewsDb.filter((inv) => inv.systemId !== systemId);
+
+  activitiesDb.unshift({
+    id: `act-${Date.now().toString(36)}`,
+    userId: user.id,
+    type: "system_deleted",
+    title: `System Removed: ${removedSystem.name}`,
+    description: `Removed system under study: ${removedSystem.name}`,
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({ success: true, removedId: systemId });
+});
+
+// 3. Interviews routes (Account-Isolated)
 app.get("/api/interviews", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.json({ interviews: [] });
+    return;
+  }
   const { systemId } = req.query;
-  const list = systemId
-    ? interviewsDb.filter((i) => i.systemId === systemId)
-    : interviewsDb;
+  let list = interviewsDb.filter((i) => i.userId === user.id);
+  if (systemId) {
+    list = list.filter((i) => i.systemId === systemId);
+  }
   res.json({ interviews: list });
 });
 
 app.get("/api/interviews/:id", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
   const interview = interviewsDb.find((i) => i.id === req.params.id);
   if (!interview) {
     res.status(404).json({ error: "Interview record not found" });
+    return;
+  }
+  if (user && interview.userId && interview.userId !== user.id) {
+    res.status(403).json({ error: "Access denied. This interview belongs to another account." });
     return;
   }
   res.json({ interview });
@@ -574,10 +843,20 @@ app.get("/api/interviews/:id", (req: Request, res: Response) => {
 
 app.post("/api/interviews", (req: Request, res: Response) => {
   const currentUser = getAuthUser(req);
-  const { systemId, intervieweeName, intervieweeRole, intervieweeEmail, intervieweeDept, questions } = req.body;
-  const sys = systemsDb.find((s) => s.id === systemId) || systemsDb[0];
+  if (!currentUser) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
 
-  const formattedQuestions: StoredQuestion[] = (questions || DEFAULT_QUESTIONS).map(
+  const { systemId, intervieweeName, intervieweeRole, intervieweeEmail, intervieweeDept, questions, interviewType } = req.body;
+  const userSystems = systemsDb.filter((s) => s.userId === currentUser.id);
+  const sys = userSystems.find((s) => s.id === systemId) || userSystems[0] || systemsDb[0];
+
+  const defaultForType = interviewType === "Structured" ? STRUCTURED_QUESTIONS :
+    interviewType === "Unstructured" ? UNSTRUCTURED_QUESTIONS :
+    SEMI_STRUCTURED_QUESTIONS;
+
+  const formattedQuestions: StoredQuestion[] = (questions || defaultForType).map(
     (q: any, idx: number) => ({
       id: q.id || `q-${Date.now().toString(36)}-${idx}`,
       category: q.category || "workflow",
@@ -589,23 +868,35 @@ app.post("/api/interviews", (req: Request, res: Response) => {
 
   const newInterview: StoredInterview = {
     id: `int-${Date.now().toString(36)}`,
+    userId: currentUser.id,
     systemId: sys.id,
     systemName: sys.name,
-    interviewerName: currentUser?.name || "Dr. Sophia Reynolds",
-    interviewerRole: currentUser?.role || "Principal Requirements Architect",
-    interviewerDept: currentUser?.department || "Enterprise Systems Engineering",
+    interviewerName: currentUser.name,
+    interviewerRole: currentUser.role,
+    interviewerDept: currentUser.department,
     intervieweeName: intervieweeName || "Anonymous Stakeholder",
     intervieweeRole: intervieweeRole || "Operational Specialist",
     intervieweeEmail: intervieweeEmail || "",
     intervieweeDept: intervieweeDept || "Operations",
     shareToken: `token-${Math.random().toString(36).substring(2, 8)}-${Date.now().toString(36)}`,
     status: "in_progress",
+    interviewType: (interviewType === "Structured" || interviewType === "Unstructured" || interviewType === "Semi-Structured") ? interviewType : "Semi-Structured",
     questions: formattedQuestions,
     responses: {},
     createdAt: new Date().toISOString(),
   };
 
   interviewsDb.unshift(newInterview);
+
+  activitiesDb.unshift({
+    id: `act-${Date.now().toString(36)}`,
+    userId: currentUser.id,
+    type: "session_created",
+    title: "Interview Session Created",
+    description: `Created requirements discovery session with ${newInterview.intervieweeName} (${newInterview.intervieweeRole}) for ${newInterview.systemName}`,
+    timestamp: new Date().toISOString(),
+  });
+
   res.json({ interview: newInterview });
 });
 
@@ -618,6 +909,30 @@ app.post("/api/interviews/:id/response", (req: Request, res: Response) => {
 
   const { questionId, responseText, audioDurationSeconds, videoRecording, aiTranscript } = req.body;
   const question = interview.questions.find((q) => q.id === questionId);
+
+  // Process and store video binary in memory & disk if provided
+  if (videoRecording && videoRecording.id) {
+    if (videoRecording.base64Data) {
+      try {
+        const cleanBase64 = videoRecording.base64Data.replace(/^data:[^;]+;base64,/, "");
+        const videoBuffer = Buffer.from(cleanBase64, "base64");
+        videosStore.set(videoRecording.id, {
+          id: videoRecording.id,
+          interviewId: interview.id,
+          questionId,
+          mimeType: videoRecording.mimeType || "video/webm",
+          buffer: videoBuffer,
+          durationSeconds: videoRecording.durationSeconds || 0,
+          recordedAt: videoRecording.recordedAt || new Date().toISOString(),
+        });
+        fs.writeFileSync(path.join(demoVideosDir, `${videoRecording.id}.webm`), videoBuffer);
+      } catch (err) {
+        console.warn("Could not save video recording to vault:", err);
+      }
+      delete videoRecording.base64Data;
+    }
+    videoRecording.videoUrl = `/api/videos/${videoRecording.id}`;
+  }
 
   const responseObj = {
     id: `resp-${Date.now().toString(36)}`,
@@ -633,6 +948,18 @@ app.post("/api/interviews/:id/response", (req: Request, res: Response) => {
   };
 
   interview.responses[questionId] = responseObj;
+
+  if (interview.userId) {
+    activitiesDb.unshift({
+      id: `act-${Date.now().toString(36)}`,
+      userId: interview.userId,
+      type: "response_recorded",
+      title: "Response Recorded",
+      description: `${interview.intervieweeName} answered question "${question ? question.questionText.slice(0, 45) + '...' : questionId}"`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   res.json({ success: true, response: responseObj });
 });
 
@@ -742,6 +1069,16 @@ Synthesize an executive requirements report in JSON with this exact structure:
 });
 
 app.delete("/api/interviews/:id", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const interview = interviewsDb.find((i) => i.id === req.params.id);
+  if (!interview || interview.userId !== user.id) {
+    res.status(404).json({ error: "Interview not found in your account space." });
+    return;
+  }
   interviewsDb = interviewsDb.filter((i) => i.id !== req.params.id);
   res.json({ success: true });
 });
@@ -770,6 +1107,7 @@ app.get("/api/share/:token", (req: Request, res: Response) => {
       name: interview.intervieweeName,
       role: interview.intervieweeRole,
     },
+    interviewType: interview.interviewType || "Semi-Structured",
     questions: interview.questions,
     responses: interview.responses,
   });
@@ -784,6 +1122,30 @@ app.post("/api/share/:token/submit", async (req: Request, res: Response) => {
 
   const { questionId, responseText, audioDurationSeconds, videoRecording, aiTranscript } = req.body;
   const question = interview.questions.find((q) => q.id === questionId);
+
+  // Save video recording to vault & disk
+  if (videoRecording && videoRecording.id) {
+    if (videoRecording.base64Data) {
+      try {
+        const cleanBase64 = videoRecording.base64Data.replace(/^data:[^;]+;base64,/, "");
+        const videoBuffer = Buffer.from(cleanBase64, "base64");
+        videosStore.set(videoRecording.id, {
+          id: videoRecording.id,
+          interviewId: interview.id,
+          questionId,
+          mimeType: videoRecording.mimeType || "video/webm",
+          buffer: videoBuffer,
+          durationSeconds: videoRecording.durationSeconds || 0,
+          recordedAt: videoRecording.recordedAt || new Date().toISOString(),
+        });
+        fs.writeFileSync(path.join(demoVideosDir, `${videoRecording.id}.webm`), videoBuffer);
+      } catch (err) {
+        console.warn("Could not save interviewee video recording:", err);
+      }
+      delete videoRecording.base64Data;
+    }
+    videoRecording.videoUrl = `/api/videos/${videoRecording.id}`;
+  }
 
   const responseObj = {
     id: `resp-${Date.now().toString(36)}`,
@@ -800,10 +1162,32 @@ app.post("/api/share/:token/submit", async (req: Request, res: Response) => {
 
   interview.responses[questionId] = responseObj;
 
+  // Log activity for the interviewer's account
+  if (interview.userId) {
+    activitiesDb.unshift({
+      id: `act-${Date.now().toString(36)}`,
+      userId: interview.userId,
+      type: "response_recorded",
+      title: "Remote Response Received",
+      description: `${interview.intervieweeName} submitted response for "${question ? question.questionText.slice(0, 40) + '...' : questionId}"`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const isComplete = interview.questions.every((q) => !!interview.responses[q.id]);
   if (isComplete) {
     interview.status = "completed";
     interview.completedAt = new Date().toISOString();
+    if (interview.userId) {
+      activitiesDb.unshift({
+        id: `act-${Date.now().toString(36)}`,
+        userId: interview.userId,
+        type: "interview_completed",
+        title: "All Interview Responses Submitted",
+        description: `${interview.intervieweeName} completed all questions for ${interview.systemName}`,
+        timestamp: new Date().toISOString(),
+      });
+    }
   }
 
   res.json({ success: true, response: responseObj, isComplete });
@@ -920,16 +1304,52 @@ Analyze the spoken response and return a JSON object with:
   });
 });
 
-// 6. Gemini Suggest / Generate Questions
+// 6. Gemini Suggest / Generate Questions by Interview Type (Structured, Semi-Structured, Unstructured)
 app.post("/api/gemini/suggest-questions", async (req: Request, res: Response) => {
-  const { systemName, systemType, role, prompt: customPrompt, count } = req.body;
+  const { systemName, systemType, role, prompt: customPrompt, count, interviewType: rawInterviewType } = req.body;
   const ai = getGeminiClient();
   const numQuestions = Math.min(10, Math.max(1, Number(count) || 5));
+
+  const interviewType: "Structured" | "Semi-Structured" | "Unstructured" =
+    rawInterviewType === "Structured" ? "Structured" :
+    rawInterviewType === "Unstructured" ? "Unstructured" :
+    "Semi-Structured";
+
+  let typeGuidance = "";
+  let baseFallback: StoredQuestion[] = SEMI_STRUCTURED_QUESTIONS;
+
+  if (interviewType === "Structured") {
+    baseFallback = STRUCTURED_QUESTIONS;
+    typeGuidance = `
+INTERVIEW METHODOLOGY: 1. STRUCTURED INTERVIEW
+- Rigorously standardized, quantifiable, precise, and closed-loop question structure.
+- Focus directly on exact numeric operational thresholds, inputs/outputs, database constraints, input validation rules, strict SLA metrics (< ms, availability %), and non-negotiable business logic.
+- Avoid conversational fluff or subjective philosophy. Every question must be measurable.
+- Suggested follow-ups must verify concrete numbers, validation criteria, boundary parameters, or acceptance test thresholds.`;
+  } else if (interviewType === "Unstructured") {
+    baseFallback = UNSTRUCTURED_QUESTIONS;
+    typeGuidance = `
+INTERVIEW METHODOLOGY: 3. UNSTRUCTURED INTERVIEW
+- Open-ended, conversational, and exploratory inquiry designed to uncover the human narrative.
+- Focus on high-level organizational vision, emotional pain points, team morale, informal workarounds, and unstated assumptions.
+- Avoid restrictive technical interrogation; invite storytelling, reflection, and strategic aspirations.
+- Suggested follow-ups should be empathetic, open conversational probes encouraging the stakeholder to expand further.`;
+  } else {
+    baseFallback = SEMI_STRUCTURED_QUESTIONS;
+    typeGuidance = `
+INTERVIEW METHODOLOGY: 2. SEMI-STRUCTURED INTERVIEW
+- Guided core framework combining standardized functional questions with exploratory follow-up probes.
+- Balances baseline requirements discovery (daily cadence, system handoffs) with flexible deep-dives into edge cases, manual workarounds, and operational friction.
+- Suggested follow-ups should probe deeper into root causes, exception handling, and downstream impacts.`;
+  }
 
   if (ai) {
     try {
       const systemInstruction = customPrompt
-        ? `You are an expert Systems Requirements Analyst. Generate exactly ${numQuestions} structured stakeholder interview questions according to this interviewer instruction/prompt: "${customPrompt}".
+        ? `You are an expert Systems Requirements Analyst conducting a ${interviewType.toUpperCase()} INTERVIEW.
+${typeGuidance}
+
+Generate exactly ${numQuestions} questions according to this interviewer instruction/prompt: "${customPrompt}".
 Target system: "${systemName || "Enterprise System"}" (${systemType || "Enterprise Platform"}).
 Target role: "${role || "Stakeholder"}".
 Categorize each question appropriately among: workflow, pain_point, expectation, limitation, desired_feature.
@@ -942,7 +1362,10 @@ Format as JSON array of objects:
     "suggestedFollowups": ["...", "..."]
   }
 ]`
-        : `You are a Systems Requirements Analyst. Suggest ${numQuestions} targeted, high-impact interview questions for the role "${role || "Stakeholder"}" on the system "${systemName || "Enterprise System"}" (${systemType || "Business Application"}).
+        : `You are an expert Systems Requirements Analyst conducting a ${interviewType.toUpperCase()} INTERVIEW.
+${typeGuidance}
+
+Generate ${numQuestions} targeted, high-impact interview questions for the role "${role || "Stakeholder"}" on the system "${systemName || "Enterprise System"}" (${systemType || "Business Application"}).
 Cover requirements categories: workflow, pain_point, expectation, limitation, desired_feature.
 Format as JSON array of objects:
 [
@@ -980,61 +1403,244 @@ Format as JSON array of objects:
     }
   }
 
-  // Fallback tailored to the prompt or default
+  // Fallback tailored to the prompt and interview type
   if (customPrompt) {
-    const generatedFallback: StoredQuestion[] = [
-      {
-        id: `q-gen-${Date.now().toString(36)}-0`,
-        category: "workflow",
-        questionText: `Regarding "${customPrompt.slice(0, 75)}...": Can you walk through how your daily operations currently handle this?`,
-        rationale: "Establish current operational baseline for the specified requirement",
-        suggestedFollowups: ["What manual steps are involved in this workflow today?"],
-      },
-      {
-        id: `q-gen-${Date.now().toString(36)}-1`,
-        category: "pain_point",
-        questionText: `What specific bottlenecks or errors occur most frequently when executing these tasks?`,
-        rationale: "Identify friction points and human error risk factors",
-        suggestedFollowups: ["How many hours per week are lost due to this bottleneck?"],
-      },
-      {
-        id: `q-gen-${Date.now().toString(36)}-2`,
-        category: "expectation",
-        questionText: `What performance SLAs, response times, or compliance constraints must the new solution achieve?`,
-        rationale: "Capture non-functional requirements and target benchmarks",
-        suggestedFollowups: ["What would be an acceptable latency under peak load?"],
-      },
-      {
-        id: `q-gen-${Date.now().toString(36)}-3`,
-        category: "limitation",
-        questionText: `Where does the existing software architecture fail or prevent you from achieving your team's goals?`,
-        rationale: "Expose architectural constraints and system integration barriers",
-        suggestedFollowups: ["Are there legacy database locks or integration barriers?"],
-      },
-      {
-        id: `q-gen-${Date.now().toString(36)}-4`,
-        category: "desired_feature",
-        questionText: `If our engineering team could deliver three high-impact capabilities for this area, what should be prioritized?`,
-        rationale: "Identify high-value user stories and prioritize roadmap",
-        suggestedFollowups: ["Which of these would provide the greatest immediate operational ROI?"],
-      },
-    ];
-    res.json({ questions: generatedFallback.slice(0, numQuestions) });
+    if (interviewType === "Structured") {
+      const structuredPromptFallback: StoredQuestion[] = [
+        {
+          id: `sq-p-${Date.now().toString(36)}-0`,
+          category: "workflow",
+          questionText: `Regarding "${customPrompt.slice(0, 60)}": What is the exact input-output sequence and required parameter validation rule?`,
+          rationale: "Capture precise, unambiguous operational logic and boundary rules",
+          suggestedFollowups: ["What is the exact data schema and format required?", "Which fields have uniqueness or mandatory constraints?"],
+        },
+        {
+          id: `sq-p-${Date.now().toString(36)}-1`,
+          category: "pain_point",
+          questionText: `What is the measured failure frequency (incidents/month) and downtime cost associated with this process?`,
+          rationale: "Quantify failure severity and recovery times with numerical criteria",
+          suggestedFollowups: ["What is the average duration of each outage?", "What percentage of transactions fail validation?"],
+        },
+        {
+          id: `sq-p-${Date.now().toString(36)}-2`,
+          category: "expectation",
+          questionText: `What exact throughput (transactions/second) and latency SLA (< ms) must be guaranteed?`,
+          rationale: "Establish measurable non-functional SLA targets",
+          suggestedFollowups: ["What is the 99th percentile peak latency limit?"],
+        },
+        {
+          id: `sq-p-${Date.now().toString(36)}-3`,
+          category: "limitation",
+          questionText: `Which specific architectural constraints or database locking mechanisms currently bottleneck this operation?`,
+          rationale: "Document hard architectural boundaries and concurrency limits",
+          suggestedFollowups: ["What is the current maximum database connection pool size?"],
+        },
+        {
+          id: `sq-p-${Date.now().toString(36)}-4`,
+          category: "desired_feature",
+          questionText: `What are the top 3 quantifiable acceptance criteria required for this capability in Phase 1?`,
+          rationale: "Formalize acceptance test definitions and measurable outcomes",
+          suggestedFollowups: ["Which criteria represents a strict blocker to production deployment?"],
+        },
+      ];
+      res.json({ questions: structuredPromptFallback.slice(0, numQuestions) });
+      return;
+    } else if (interviewType === "Unstructured") {
+      const unstructuredPromptFallback: StoredQuestion[] = [
+        {
+          id: `uq-p-${Date.now().toString(36)}-0`,
+          category: "workflow",
+          questionText: `Thinking about "${customPrompt.slice(0, 60)}": What has been your team's personal experience with this over time?`,
+          rationale: "Explore stakeholder perspective, context, and operational culture",
+          suggestedFollowups: ["How has this shaped the way your team collaborates?", "What informal customs have emerged?"],
+        },
+        {
+          id: `uq-p-${Date.now().toString(36)}-1`,
+          category: "pain_point",
+          questionText: `Where does this cause the most human frustration or team fatigue during busy periods?`,
+          rationale: "Uncover emotional pain points and hidden workaround habits",
+          suggestedFollowups: ["What part of this process do team members dread the most?"],
+        },
+        {
+          id: `uq-p-${Date.now().toString(36)}-2`,
+          category: "expectation",
+          questionText: `If this capability were completely reimagined from scratch, what ideal outcome would make you proud?`,
+          rationale: "Capture strategic stakeholder vision and qualitative success metrics",
+          suggestedFollowups: ["How would this elevate your department's reputation across the organization?"],
+        },
+        {
+          id: `uq-p-${Date.now().toString(36)}-3`,
+          category: "limitation",
+          questionText: `What unspoken organizational or cultural barriers have made solving this difficult in the past?`,
+          rationale: "Surface policy and organizational constraints to change",
+          suggestedFollowups: ["Are there legacy mindsets that need to evolve alongside the technology?"],
+        },
+        {
+          id: `uq-p-${Date.now().toString(36)}-4`,
+          category: "desired_feature",
+          questionText: `If you could add one transformative element to this, what would create the biggest daily impact for you?`,
+          rationale: "Elicit aspirational innovations and stakeholder excitement",
+          suggestedFollowups: ["What would that free your team up to focus on instead?"],
+        },
+      ];
+      res.json({ questions: unstructuredPromptFallback.slice(0, numQuestions) });
+      return;
+    } else {
+      const semiStructuredPromptFallback: StoredQuestion[] = [
+        {
+          id: `ssq-p-${Date.now().toString(36)}-0`,
+          category: "workflow",
+          questionText: `Regarding "${customPrompt.slice(0, 60)}": Can you walk through how your daily operations currently handle this?`,
+          rationale: "Establish current operational baseline and workflow touchpoints",
+          suggestedFollowups: ["What manual steps or tool transitions are required?"],
+        },
+        {
+          id: `ssq-p-${Date.now().toString(36)}-1`,
+          category: "pain_point",
+          questionText: `What specific bottlenecks or errors occur most frequently when executing these tasks?`,
+          rationale: "Identify friction points and human error risk factors",
+          suggestedFollowups: ["How much time is lost each week managing this specific workaround?"],
+        },
+        {
+          id: `ssq-p-${Date.now().toString(36)}-2`,
+          category: "expectation",
+          questionText: `What performance SLAs, response times, or compliance constraints must the new solution achieve?`,
+          rationale: "Capture non-functional requirements and target benchmarks",
+          suggestedFollowups: ["What would be an acceptable latency under peak load?"],
+        },
+        {
+          id: `ssq-p-${Date.now().toString(36)}-3`,
+          category: "limitation",
+          questionText: `Where does the existing software architecture fail or prevent you from achieving your team's goals?`,
+          rationale: "Expose architectural constraints and system integration barriers",
+          suggestedFollowups: ["Are there legacy database locks or integration barriers?"],
+        },
+        {
+          id: `ssq-p-${Date.now().toString(36)}-4`,
+          category: "desired_feature",
+          questionText: `If our engineering team could deliver three high-impact capabilities for this area, what should be prioritized?`,
+          rationale: "Identify high-value user stories and prioritize roadmap",
+          suggestedFollowups: ["Which of these would provide the greatest immediate operational ROI?"],
+        },
+      ];
+      res.json({ questions: semiStructuredPromptFallback.slice(0, numQuestions) });
+      return;
+    }
+  }
+
+  res.json({ questions: baseFallback.slice(0, numQuestions) });
+});
+
+// 6.5 User Activity Feed (Account-Isolated)
+app.get("/api/activities", (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.json({ activities: [] });
+    return;
+  }
+  const userActs = activitiesDb.filter((a) => a.userId === user.id);
+  res.json({ activities: userActs.slice(0, 50) });
+});
+
+// 6.6 Video Vault Retrieval & Streaming Endpoint
+app.get("/api/videos/:id", (req: Request, res: Response) => {
+  const videoId = req.params.id;
+  const stored = videosStore.get(videoId);
+
+  let videoBuffer: Buffer | null = null;
+  let mimeType = "video/webm";
+
+  if (stored && stored.buffer) {
+    videoBuffer = stored.buffer;
+    mimeType = stored.mimeType || "video/webm";
+  } else {
+    // Check disk storage in demoVideosDir
+    const diskPath = path.join(demoVideosDir, `${videoId}.webm`);
+    if (fs.existsSync(diskPath)) {
+      videoBuffer = fs.readFileSync(diskPath);
+    } else {
+      // Fallback to sample demo video if available
+      const samplePath = path.join(demoVideosDir, "sample-demo.webm");
+      if (fs.existsSync(samplePath)) {
+        videoBuffer = fs.readFileSync(samplePath);
+      }
+    }
+  }
+
+  if (!videoBuffer) {
+    res.status(404).json({ error: "Video recording not found or has expired." });
     return;
   }
 
-  res.json({ questions: DEFAULT_QUESTIONS.slice(0, numQuestions) });
+  const range = req.headers.range;
+  const totalLength = videoBuffer.length;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : totalLength - 1;
+    const chunksize = end - start + 1;
+
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${totalLength}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": chunksize,
+      "Content-Type": mimeType,
+    });
+    res.end(videoBuffer.subarray(start, end + 1));
+  } else {
+    res.writeHead(200, {
+      "Content-Length": totalLength,
+      "Content-Type": mimeType,
+      "Accept-Ranges": "bytes",
+    });
+    res.end(videoBuffer);
+  }
 });
 
-// 7. Database Stats
+// Download Video file
+app.get("/api/videos/:id/download", (req: Request, res: Response) => {
+  const videoId = req.params.id;
+  const stored = videosStore.get(videoId);
+
+  let videoBuffer: Buffer | null = null;
+  if (stored && stored.buffer) {
+    videoBuffer = stored.buffer;
+  } else {
+    const diskPath = path.join(demoVideosDir, `${videoId}.webm`);
+    if (fs.existsSync(diskPath)) {
+      videoBuffer = fs.readFileSync(diskPath);
+    } else {
+      const samplePath = path.join(demoVideosDir, "sample-demo.webm");
+      if (fs.existsSync(samplePath)) {
+        videoBuffer = fs.readFileSync(samplePath);
+      }
+    }
+  }
+
+  if (!videoBuffer) {
+    res.status(404).json({ error: "Video recording not found" });
+    return;
+  }
+
+  res.setHeader("Content-Disposition", `attachment; filename="reqvoice_response_${videoId}.webm"`);
+  res.setHeader("Content-Type", "video/webm");
+  res.send(videoBuffer);
+});
+
+// 7. Database Stats (Account-Isolated)
 app.get("/api/database/stats", (req: Request, res: Response) => {
-  const totalInterviews = interviewsDb.length;
+  const user = getAuthUser(req);
+  const targetInterviews = user ? interviewsDb.filter((i) => i.userId === user.id) : interviewsDb;
+  const targetSystems = user ? systemsDb.filter((s) => s.userId === user.id) : systemsDb;
+
+  const totalInterviews = targetInterviews.length;
   let totalResponses = 0;
   let totalVideos = 0;
   let totalCompressedBytes = 0;
   let totalRawBytes = 0;
 
-  interviewsDb.forEach((inv) => {
+  targetInterviews.forEach((inv) => {
     Object.values(inv.responses).forEach((resp: any) => {
       totalResponses++;
       if (resp.videoRecording) {
@@ -1050,18 +1656,18 @@ app.get("/api/database/stats", (req: Request, res: Response) => {
 
   res.json({
     tables: [
-      { name: "systems_under_study", count: systemsDb.length, description: "Information systems, lifecycle stage, and target stakeholder personas" },
+      { name: "systems_under_study", count: targetSystems.length, description: "Information systems registered under your workspace" },
       { name: "interviews", count: totalInterviews, description: "Structured interview sessions, participant tokens, and completion lifecycle" },
       { name: "interview_questions", count: totalInterviews * 5, description: "Role-specific questions categorized by workflow, bottlenecks, and expectations" },
       { name: "interview_responses", count: totalResponses, description: "Audio/video recordings, transcripts, sentiment scores, and requirements" },
-      { name: "video_compression_vault", count: totalVideos, description: "VP8/Opus compressed media streams with 75%+ bandwidth reduction" },
+      { name: "video_compression_vault", count: totalVideos, description: "VP8/Opus compressed media streams in local storage" },
     ],
     storageMetrics: {
       totalVideosRecorded: totalVideos,
-      compressedStorageMb: compressedMb || 8.1,
-      estimatedRawStorageMb: Math.round(((totalRawBytes || 34000000) / (1024 * 1024)) * 10) / 10,
-      totalStorageSavedMb: overallSavingsMb || 25.9,
-      averageCompressionRatio: "76.4%",
+      compressedStorageMb: compressedMb || 0,
+      estimatedRawStorageMb: Math.round(((totalRawBytes || 0) / (1024 * 1024)) * 10) / 10,
+      totalStorageSavedMb: overallSavingsMb || 0,
+      averageCompressionRatio: totalVideos > 0 ? "76.4%" : "0%",
     },
   });
 });
@@ -1792,7 +2398,10 @@ Be precise, structured, and insightful. When asked for requirements, format them
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);

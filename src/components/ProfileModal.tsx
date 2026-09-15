@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   User,
@@ -48,11 +48,23 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   // Profile fields
   const [name, setName] = useState(user.name);
-  const [username, setUsername] = useState(user.username || 'sophia_reynolds');
-  const [role, setRole] = useState(user.role);
-  const [department, setDepartment] = useState(user.department);
-  const [bio, setBio] = useState(user.bio || 'Enterprise Systems Requirements Architect');
+  const [username, setUsername] = useState(user.username || '');
+  const [role, setRole] = useState(user.role || '');
+  const [department, setDepartment] = useState(user.department || '');
+  const [bio, setBio] = useState(user.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || AVATAR_PRESETS[0]);
+
+  // Synchronize state when user or modal open state changes
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '');
+      setUsername(user.username || '');
+      setRole(user.role || '');
+      setDepartment(user.department || '');
+      setBio(user.bio || '');
+      setAvatarUrl(user.avatarUrl || AVATAR_PRESETS[0]);
+    }
+  }, [user, isOpen]);
 
   // Password fields
   const [currentPassword, setCurrentPassword] = useState('');

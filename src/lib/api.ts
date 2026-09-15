@@ -1,4 +1,4 @@
-import { SystemUnderStudy, InterviewSession, InterviewGuide, InterviewQuestion } from '../types';
+import { SystemUnderStudy, InterviewSession, InterviewGuide, InterviewQuestion, UserActivity } from '../types';
 
 const TOKEN_KEY = 'reqvoice_auth_token';
 
@@ -119,6 +119,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    delete: (id: string) =>
+      request<{ success: boolean }>(`/api/systems/${id}`, {
+        method: 'DELETE',
+      }),
   },
   guides: {
     list: (systemId?: string) =>
@@ -134,6 +138,7 @@ export const api = {
       intervieweeRole: string;
       intervieweeEmail?: string;
       intervieweeDept?: string;
+      interviewType?: InterviewType;
       questions: Partial<InterviewQuestion>[];
     }) =>
       request<{ interview: InterviewSession }>('/api/interviews', {
@@ -240,7 +245,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    suggestQuestions: (data: { systemName: string; systemType?: string; role?: string; prompt?: string; count?: number }) =>
+    suggestQuestions: (data: {
+      systemName: string;
+      systemType?: string;
+      role?: string;
+      prompt?: string;
+      count?: number;
+      interviewType?: 'Structured' | 'Semi-Structured' | 'Unstructured';
+    }) =>
       request<{ questions: InterviewQuestion[] }>('/api/gemini/suggest-questions', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -271,6 +283,13 @@ export const api = {
       fetch('/api/database/mysql-schema').then((r) => r.text()),
     downloadMysqlDumpUrl: '/api/database/mysql-dump',
     downloadSingleReportUrl: '/api/database/export-single-report',
+  },
+  activities: {
+    list: () => request<{ activities: UserActivity[] }>('/api/activities'),
+  },
+  videos: {
+    getUrl: (id: string) => `/api/videos/${id}`,
+    getDownloadUrl: (id: string) => `/api/videos/${id}/download`,
   },
   aiChat: {
     getModels: () =>

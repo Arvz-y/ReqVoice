@@ -4,14 +4,10 @@ import {
   FileText,
   Plus,
   ArrowRight,
-  HardDrive,
   Users,
   Layers,
   Sparkles,
   Share2,
-  CheckCircle2,
-  Bot,
-  Smartphone,
 } from 'lucide-react';
 import { InterviewSession, SystemUnderStudy, UserProfile } from '../types';
 import { MobileInstallBanner } from './MobileInstallBanner';
@@ -66,37 +62,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Collect stakeholder input through video, audio, and typed responses with automated Gemini AI transcription and structured MySQL storage.
           </p>
 
-          <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <div className="pt-1">
             <button
               onClick={onOpenCreateInterview}
               className="flex items-center space-x-2 px-4 sm:px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-950/40 transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>New Interview Session</span>
-            </button>
-
-            <button
-              onClick={() => onNavigateToTab('reports')}
-              className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              <span>View Reports</span>
-            </button>
-
-            <button
-              onClick={() => onNavigateToTab('chat')}
-              className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 text-xs font-semibold border border-indigo-700/60 transition-colors cursor-pointer"
-            >
-              <Bot className="w-3.5 h-3.5 text-indigo-400" />
-              <span>AI Chatbot</span>
-            </button>
-
-            <button
-              onClick={() => onNavigateToTab('mobile')}
-              className="flex items-center space-x-1.5 px-3.5 sm:px-4 py-2.5 rounded-xl bg-violet-950/60 hover:bg-violet-900/60 text-violet-300 text-xs font-semibold border border-violet-700/60 transition-colors cursor-pointer"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-violet-400" />
-              <span>Mobile Edition</span>
             </button>
           </div>
         </div>
@@ -105,8 +77,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Metrics Row - Responsive 2-col on mobile, 4-col on desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* Metrics Row - Clean 3-col layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-1">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Systems</span>
@@ -133,15 +105,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xl sm:text-2xl font-bold text-white font-heading">{totalVideos}</p>
           <p className="text-[11px] text-slate-500 truncate">Recorded responses</p>
         </div>
-
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Storage Savings</span>
-            <HardDrive className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-xl sm:text-2xl font-bold text-emerald-400 font-heading">76.4%</p>
-          <p className="text-[11px] text-slate-500 truncate">VP8 compression</p>
-        </div>
       </div>
 
       {/* Main Grid: Sessions List + Systems Under Study */}
@@ -149,18 +112,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         
         {/* Active Interview Sessions List */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-white font-heading">Active Interview Sessions</h2>
-              <p className="text-xs text-slate-400">Stakeholder questionnaires with video evidence and AI transcripts</p>
-            </div>
-            <button
-              onClick={onOpenCreateInterview}
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center space-x-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Session</span>
-            </button>
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-white font-heading">Active Interview Sessions</h2>
+            <p className="text-xs text-slate-400">Stakeholder questionnaires with video evidence and AI transcripts</p>
           </div>
 
           <div className="space-y-3">
@@ -178,6 +132,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-white">{inv.intervieweeName}</span>
                         <span className="text-xs text-indigo-400 font-medium">{inv.intervieweeRole}</span>
+                        {inv.interviewType && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              inv.interviewType === 'Structured'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : inv.interviewType === 'Unstructured'
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
+                            }`}
+                          >
+                            {inv.interviewType}
+                          </span>
+                        )}
                         {inv.status === 'completed' ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             Completed

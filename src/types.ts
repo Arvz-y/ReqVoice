@@ -1,5 +1,7 @@
 export type QuestionCategory = 'workflow' | 'pain_point' | 'expectation' | 'limitation' | 'desired_feature';
 
+export type InterviewType = 'Structured' | 'Semi-Structured' | 'Unstructured';
+
 export interface InterviewQuestion {
   id: string;
   category: QuestionCategory;
@@ -10,6 +12,7 @@ export interface InterviewQuestion {
 
 export interface SystemUnderStudy {
   id: string;
+  userId?: string;
   name: string;
   type: string;
   description: string;
@@ -35,7 +38,10 @@ export interface RecordedVideoData {
   durationSeconds: number;
   compressionStats: VideoCompressionStats;
   recordedAt: string;
+  base64Data?: string;
 }
+
+export type VideoRecording = RecordedVideoData;
 
 export interface AITranscriptData {
   transcript: string;
@@ -82,6 +88,7 @@ export interface SummaryReport {
 
 export interface InterviewSession {
   id: string;
+  userId?: string;
   systemId: string;
   systemName: string;
   interviewerName: string;
@@ -93,11 +100,21 @@ export interface InterviewSession {
   intervieweeDept?: string;
   shareToken: string;
   status: 'scheduled' | 'in_progress' | 'completed';
+  interviewType?: InterviewType;
   questions: InterviewQuestion[];
   responses: Record<string, InterviewResponse>;
   summaryReport?: SummaryReport;
   createdAt: string;
   completedAt?: string;
+}
+
+export interface UserActivity {
+  id: string;
+  userId: string;
+  type: 'session_created' | 'response_recorded' | 'interview_completed' | 'system_added' | 'system_deleted' | 'report_generated' | 'login';
+  title: string;
+  description: string;
+  timestamp: string;
 }
 
 export interface UserProfile {

@@ -15,7 +15,7 @@ import {
   HelpCircle,
   Layers,
 } from 'lucide-react';
-import { SystemUnderStudy, InterviewQuestion } from '../types';
+import { SystemUnderStudy, InterviewQuestion, InterviewType } from '../types';
 import { api } from '../lib/api';
 
 interface CreateInterviewModalProps {
@@ -33,6 +33,151 @@ const CATEGORY_OPTIONS: { id: InterviewQuestion['category']; label: string }[] =
   { id: 'desired_feature', label: 'Prioritized Desired Features' },
 ];
 
+const INTERVIEW_TYPE_DETAILS: Record<
+  InterviewType,
+  {
+    num: string;
+    label: string;
+    badgeColor: string;
+    description: string;
+    defaultPrompt: string;
+    questions: Partial<InterviewQuestion>[];
+  }
+> = {
+  Structured: {
+    num: '1',
+    label: 'Structured',
+    badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    description: 'Standardized, quantifiable, closed-loop inquiry. Strict numeric SLA targets (< ms), inputs/outputs, and acceptance test criteria.',
+    defaultPrompt: 'Generate standardized, quantifiable questions focusing on exact step-by-step inputs, numerical SLA thresholds (< ms), failure frequencies, and strict acceptance criteria.',
+    questions: [
+      {
+        id: 'sq-1',
+        category: 'workflow',
+        questionText: 'What are the exact step-by-step inputs, validation checks, and data transformations executed in this operational sequence?',
+        rationale: 'Map precise sequential data flow and operational business rules without ambiguity',
+        suggestedFollowups: ['What is the exact maximum character length and format for each input parameter?'],
+      },
+      {
+        id: 'sq-2',
+        category: 'pain_point',
+        questionText: 'What is the measured frequency of system failures per week, and what is the exact average downtime in minutes?',
+        rationale: 'Quantify operational incident impact, MTTR, and failure severity with numeric metrics',
+        suggestedFollowups: ['What percentage of failure incidents result in manual data recovery procedures?'],
+      },
+      {
+        id: 'sq-3',
+        category: 'expectation',
+        questionText: 'What are the mandatory numerical SLA targets for API response latency (< ms) and peak concurrent user throughput?',
+        rationale: 'Establish quantifiable non-functional criteria and SLA compliance thresholds',
+        suggestedFollowups: ['What is the maximum allowable latency under 99th percentile peak load?'],
+      },
+      {
+        id: 'sq-4',
+        category: 'limitation',
+        questionText: 'Which specific database locks, third-party API rate limits, or batch window durations restrict current transaction throughput?',
+        rationale: 'Identify hard technical boundaries and architectural concurrency caps',
+        suggestedFollowups: ['What is the exact query timeout threshold currently configured in the database?'],
+      },
+      {
+        id: 'sq-5',
+        category: 'desired_feature',
+        questionText: 'What are the top 3 functional capabilities required for Phase 1 acceptance criteria, ranked in strict order of priority?',
+        rationale: 'Establish formal ISO/IEC requirements acceptance baseline and scoring criteria',
+        suggestedFollowups: ['What quantitative metric will verify successful deployment of each capability?'],
+      },
+    ],
+  },
+  'Semi-Structured': {
+    num: '2',
+    label: 'Semi-Structured',
+    badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    description: 'Guided core framework combining standardized functional questions with exploratory follow-up probes for deeper insights into manual friction.',
+    defaultPrompt: 'Focus on daily routine workflows, acute operational bottlenecks, SLA response time requirements, system architecture limitations, and top prioritized features.',
+    questions: [
+      {
+        id: 'ssq-1',
+        category: 'workflow',
+        questionText: 'Can you walk through your primary daily operational workflows in the current system?',
+        rationale: 'Establish baseline operational cadence and user task allocations',
+        suggestedFollowups: ['Which step in this workflow takes the most human attention?'],
+      },
+      {
+        id: 'ssq-2',
+        category: 'pain_point',
+        questionText: 'What are the most frustrating bottlenecks, manual workarounds, or errors you encounter?',
+        rationale: 'Identify acute friction points and process vulnerabilities',
+        suggestedFollowups: ['How many hours each week are lost managing this workaround?'],
+      },
+      {
+        id: 'ssq-3',
+        category: 'expectation',
+        questionText: 'What are your core expectations for system latency, response time, and user ergonomics?',
+        rationale: 'Discover non-functional requirements and SLA benchmarks',
+        suggestedFollowups: ['What sub-second latency is considered acceptable?'],
+      },
+      {
+        id: 'ssq-4',
+        category: 'limitation',
+        questionText: 'Where does the current software architecture fail or prevent your team from achieving goals?',
+        rationale: 'Expose architectural boundaries and integration bottlenecks',
+        suggestedFollowups: ['Is the delay in data ingestion, indexing, or batch sync?'],
+      },
+      {
+        id: 'ssq-5',
+        category: 'desired_feature',
+        questionText: 'If you could prioritize three essential capabilities for the new system, what would they be?',
+        rationale: 'Collect prioritized stakeholder requirements',
+        suggestedFollowups: ['Which of these is a non-negotiable prerequisite to adoption?'],
+      },
+    ],
+  },
+  Unstructured: {
+    num: '3',
+    label: 'Unstructured',
+    badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    description: 'Open-ended, conversational, and exploratory inquiry designed to uncover stakeholder narratives, team morale, informal workarounds, and organizational vision.',
+    defaultPrompt: 'Explore high-level organizational vision, emotional pain points, team morale, informal workarounds, and unstated assumptions through open-ended questions.',
+    questions: [
+      {
+        id: 'uq-1',
+        category: 'workflow',
+        questionText: "From your perspective, how does your department's day-to-day work fit into the bigger mission of the organization?",
+        rationale: 'Explore high-level stakeholder context, organizational environment, and collaborative dynamics',
+        suggestedFollowups: ["How has the nature of your team's day-to-day work evolved over recent years?"],
+      },
+      {
+        id: 'uq-2',
+        category: 'pain_point',
+        questionText: 'What aspects of the current technology cause the most friction or headaches for your team on a human level?',
+        rationale: 'Uncover emotional pain points, team fatigue, and hidden informal workarounds',
+        suggestedFollowups: ['If you could wave a magic wand and eliminate one daily annoyance, what would it be?'],
+      },
+      {
+        id: 'uq-3',
+        category: 'expectation',
+        questionText: 'If this new system were an absolute dream to use every day, what would that feel like for your team?',
+        rationale: 'Discover strategic user vision, qualitative delight factors, and emotional expectations',
+        suggestedFollowups: ['How would you measure whether this project was a runaway success one year from now?'],
+      },
+      {
+        id: 'uq-4',
+        category: 'limitation',
+        questionText: 'What organizational or technological hurdles seem to hold your department back the most right now?',
+        rationale: 'Surface unspoken cultural, policy, and systemic barriers to organizational change',
+        suggestedFollowups: ['Are there legacy policies or habits that might clash with modern workflows?'],
+      },
+      {
+        id: 'uq-5',
+        category: 'desired_feature',
+        questionText: 'Looking forward, what kind of innovations or superpowers would make the biggest meaningful difference in your work life?',
+        rationale: 'Gather open-ended aspirational capabilities, innovation ideas, and strategic roadmap value',
+        suggestedFollowups: ['What new opportunities could your team pursue if routine manual work was automated?'],
+      },
+    ],
+  },
+};
+
 export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
   systems,
   isOpen,
@@ -44,14 +189,13 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
   const [intervieweeRole, setIntervieweeRole] = useState('');
   const [intervieweeEmail, setIntervieweeEmail] = useState('');
   const [intervieweeDept, setIntervieweeDept] = useState('');
+  const [interviewType, setInterviewType] = useState<InterviewType>('Semi-Structured');
 
   // Questionnaire creation mode: 'ai' or 'manual'
   const [creationMode, setCreationMode] = useState<'ai' | 'manual'>('ai');
 
   // AI Prompt Builder State
-  const [aiPrompt, setAiPrompt] = useState(
-    'Focus on daily routine workflows, acute operational bottlenecks, SLA response time requirements, system architecture limitations, and top prioritized features.'
-  );
+  const [aiPrompt, setAiPrompt] = useState(INTERVIEW_TYPE_DETAILS['Semi-Structured'].defaultPrompt);
   const [questionCount, setQuestionCount] = useState(5);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
 
@@ -60,44 +204,10 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
   const [manualCategory, setManualCategory] = useState<InterviewQuestion['category']>('workflow');
   const [manualRationale, setManualRationale] = useState('');
 
-  // Configured Questions list
-  const [questions, setQuestions] = useState<Partial<InterviewQuestion>[]>([
-    {
-      id: 'q-init-1',
-      category: 'workflow',
-      questionText: 'Can you walk through your primary daily operational workflows in the current system?',
-      rationale: 'Establish baseline operational cadence and user task allocations',
-      suggestedFollowups: ['Which step in this workflow takes the most human attention?'],
-    },
-    {
-      id: 'q-init-2',
-      category: 'pain_point',
-      questionText: 'What are the most frustrating bottlenecks, manual workarounds, or errors you encounter?',
-      rationale: 'Identify acute friction points and process vulnerabilities',
-      suggestedFollowups: ['How many hours each week are lost managing this workaround?'],
-    },
-    {
-      id: 'q-init-3',
-      category: 'expectation',
-      questionText: 'What are your core expectations for system latency, response time, and user ergonomics?',
-      rationale: 'Discover non-functional requirements and SLA benchmarks',
-      suggestedFollowups: ['What sub-second latency is considered acceptable?'],
-    },
-    {
-      id: 'q-init-4',
-      category: 'limitation',
-      questionText: 'Where does the current software architecture fail or prevent your team from achieving goals?',
-      rationale: 'Expose architectural boundaries and integration bottlenecks',
-      suggestedFollowups: ['Is the delay in data ingestion, indexing, or batch sync?'],
-    },
-    {
-      id: 'q-init-5',
-      category: 'desired_feature',
-      questionText: 'If you could prioritize three essential capabilities for the new system, what would they be?',
-      rationale: 'Collect prioritized stakeholder requirements',
-      suggestedFollowups: ['Which of these is a non-negotiable prerequisite to adoption?'],
-    },
-  ]);
+  // Configured Questions list initialized with Semi-Structured template
+  const [questions, setQuestions] = useState<Partial<InterviewQuestion>[]>(
+    INTERVIEW_TYPE_DETAILS['Semi-Structured'].questions
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -105,6 +215,17 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
   if (!isOpen) return null;
 
   const currentSystem = systems.find((s) => s.id === systemId) || systems[0];
+
+  // Change interview type handler
+  const handleSelectInterviewType = (type: InterviewType) => {
+    setInterviewType(type);
+    setAiPrompt(INTERVIEW_TYPE_DETAILS[type].defaultPrompt);
+  };
+
+  // Handler to load the preset questions for currently selected interview type
+  const handleLoadTypePresetQuestions = (type: InterviewType) => {
+    setQuestions(INTERVIEW_TYPE_DETAILS[type].questions);
+  };
 
   // Handler: Prompt AI to generate questions
   const handlePromptAI = async () => {
@@ -122,6 +243,7 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
         role: intervieweeRole || 'Stakeholder',
         prompt: aiPrompt,
         count: questionCount,
+        interviewType: interviewType,
       });
 
       if (res.questions && res.questions.length > 0) {
@@ -181,6 +303,7 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
         intervieweeRole: intervieweeRole.trim() || 'Stakeholder',
         intervieweeEmail: intervieweeEmail.trim(),
         intervieweeDept: intervieweeDept.trim() || 'Operations',
+        interviewType: interviewType,
         questions,
       });
 
@@ -301,7 +424,76 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
             </div>
           </div>
 
-          {/* Section 2: Questionnaire Creation Mode Switcher */}
+          {/* Section 2: Type of Interview Selection */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold text-white block">
+                  Type of Interview
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Select interview methodology. The AI generates targeted questions tailored to this protocol.
+                </p>
+              </div>
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${INTERVIEW_TYPE_DETAILS[interviewType].badgeColor}`}>
+                Active: {interviewType}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {(['Structured', 'Semi-Structured', 'Unstructured'] as InterviewType[]).map((typeKey) => {
+                const info = INTERVIEW_TYPE_DETAILS[typeKey];
+                const isSelected = interviewType === typeKey;
+                return (
+                  <div
+                    key={typeKey}
+                    onClick={() => handleSelectInterviewType(typeKey)}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between space-y-2 ${
+                      isSelected
+                        ? 'bg-slate-800/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
+                        : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-white flex items-center space-x-1.5">
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${
+                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {info.num}
+                          </span>
+                          <span>{info.label}</span>
+                        </span>
+                        {isSelected && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                        {info.description}
+                      </p>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-between border-t border-slate-800/60">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectInterviewType(typeKey);
+                          handleLoadTypePresetQuestions(typeKey);
+                        }}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 cursor-pointer"
+                        title="Populate questions list with recommended questions for this methodology"
+                      >
+                        Load Template ({info.questions.length} Qs)
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section 3: Questionnaire Creation Mode Switcher */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -345,9 +537,18 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
             {/* TAB A: Prompt the AI */}
             {creationMode === 'ai' && (
               <div className="p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/20 space-y-3">
-                <div className="flex items-center space-x-2 text-indigo-400 text-xs font-semibold">
-                  <Sparkles className="w-4 h-4" />
-                  <span>AI Question Generator Prompt</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-indigo-400 text-xs font-semibold">
+                    <Sparkles className="w-4 h-4" />
+                    <span>AI Question Protocol ({interviewType})</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(INTERVIEW_TYPE_DETAILS[interviewType].defaultPrompt)}
+                    className="text-[10px] text-indigo-300 hover:text-indigo-200 underline cursor-pointer"
+                  >
+                    Reset prompt to {interviewType} template
+                  </button>
                 </div>
 
                 <div className="space-y-1.5">
@@ -386,7 +587,7 @@ export const CreateInterviewModal: React.FC<CreateInterviewModalProps> = ({
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer disabled:opacity-50"
                   >
                     <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
-                    <span>{isGeneratingAI ? 'Generating Questions...' : 'Prompt AI to Generate'}</span>
+                    <span>{isGeneratingAI ? 'Generating Questions...' : `Generate ${interviewType} Questions`}</span>
                   </button>
                 </div>
               </div>

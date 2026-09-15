@@ -1,6 +1,26 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Suppress benign [vite] dev-server websocket connection notices in iframe preview
+      (function() {
+        var origError = console.error;
+        console.error = function() {
+          var first = arguments[0];
+          if (
+            typeof first === 'string' &&
+            (first === '[vite]' ||
+             first.indexOf('[vite]') === 0 ||
+             first.indexOf('vite-plugin-pwa') !== -1 ||
+             first.indexOf('WebSocket') !== -1)
+          ) {
+            console.warn.apply(console, arguments);
+            return;
+          }
+          origError.apply(console, arguments);
+        };
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>reqvoiceV2 - Systems Requirements Interview Intelligence Platform</title>
@@ -18,6 +38,7 @@
     <meta name="apple-mobile-web-app-title" content="reqvoiceV2" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
 
     <!-- Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
